@@ -43,8 +43,11 @@ def L2_distance(x, x_hat, batch_size=1):
         loss = (diff_weights + diff_biases) / batch_size
 
     elif isinstance(x, tuple):
-        diff_weights = sum([torch.sum(torch.square(w1 - w2), (1,2,3)) for w1, w2 in zip(x_hat[0], x[0])])
-        diff_biases = sum([torch.sum(torch.square(b1 - b2), (1,2)) for b1, b2 in zip(x_hat[1], x[1])])
+        # problem here w1 and w2 are 3D not 4D
+        #diff_weights = sum([torch.sum(torch.square(w1 - w2), (1,2,3)) for w1, w2 in zip(x_hat[0], x[0])])
+        #diff_biases = sum([torch.sum(torch.square(b1 - b2), (1,2)) for b1, b2 in zip(x_hat[1], x[1])])
+        diff_weights = sum([torch.sum(torch.square(w1 - w2), (1,2)) for w1, w2 in zip(x_hat[0], x[0])])
+        diff_biases = sum([torch.sum(torch.square(b1 - b2), (1)) for b1, b2 in zip(x_hat[1], x[1])])
         loss = (diff_weights + diff_biases) / batch_size
     else:
         raise NotImplemented

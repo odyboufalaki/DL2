@@ -1,0 +1,4 @@
+*.out
+*.job
+/data/
+__pycache__/
