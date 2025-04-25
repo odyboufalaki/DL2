@@ -15,7 +15,7 @@ train_args:
   val_acc_threshold: 0.1
   patience: 50
   seed: 0
-  loss: CrossEntropyLoss
+  loss: ReconstructionLoss
 
 scalegmn_args:
   d_in_v: &d_in_v 1  # initial dimension of input nn bias
@@ -96,7 +96,7 @@ scalegmn_args:
     d_rho: *d_hid  # intermediate dimension within Readout module
 
 decoder_args:
-  data_layer_layout: *layer_layout  # refer to layer_layout in the data section
+  data_layer_layout: [2, 32, 32, 1]  # explicitly define the layer layout
   d_input: *d_hid  # initial dimension of input nn bias
   d_hidden: []  # hidden dimension
 

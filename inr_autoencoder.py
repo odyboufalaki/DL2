@@ -26,7 +26,7 @@ def main(args=None):
 
     torch.set_float32_matmul_precision('high')
 
-    print(yaml.dump(conf, default_flow_style=False))
+    # print(yaml.dump(conf, default_flow_style=False))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if conf["wandb"]:
@@ -161,7 +161,20 @@ def main(args=None):
                 optimizer.zero_grad()
                 out = net(batch)
 
-                loss = criterion(out, batch.label)
+                print(wb.biases[0].shape, wb.weights[0].shape)
+
+                reconstructed_wb = [net.decoder.reconstruct_inr_model(out[k], flatten_input=True) for k in range(out.shape[0])]
+
+                wb = [
+                    net.decoder.reconstruct_inr_model(
+                        [wb.weights[layer][k].squeeze(-1).permute(1, 0) for layer in range(len(wb.weights))],
+                        [wb.biases[layer][k].squeeze(-1) for layer in range(len(wb.biases))]
+                    )
+                    for k in range(out.shape[0])
+                ]
+
+                exit(0)
+                loss = criterion(reconstructed_wb, wb, batch.label)
                 loss.backward()
                 log = {}
                 if conf['optimization']['clip_grad']:
@@ -285,7 +298,7 @@ def evaluate(model, loader, eval_dataset=None, num_samples=0, batch_size=0, num_
     correct = 0.0
     total = 0.0
     predicted, gt = [], []
-    for batch in loader:
+    for batch, wb in loader:
         batch = batch.to(device)
         out = model(batch)
         loss += F.cross_entropy(out, batch.label, reduction="sum")
@@ -379,6 +392,9 @@ if __name__ == '__main__':
 
     if isinstance(args.gpu_ids, int):
         args.gpu_ids = [args.gpu_ids]
+
+    if not args.conf:
+        args.conf = "configs/mnist_cls/scalegmn_autoencoder.yml"
 
     conf = yaml.safe_load(open(args.conf))
 

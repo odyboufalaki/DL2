@@ -31,9 +31,9 @@ with open(input_file, 'r') as f:
 # }
 
 samples_per_class = {
-    "train": 10,
-    "val": 2,
-    "test": 2
+    "train": 1,
+    "val": 1,
+    "test": 1
 }
 new_config = {}
 for split in ["test", "train", "val"]:
