@@ -9,7 +9,7 @@ class Decoder(nn.Module, ABC):
     This class defines the interface for all decoders.
     """
 
-    def __init__(self):
+    def __init__(self, model_args, **kwargs):
         self.net = None
         super().__init__()
 
@@ -26,16 +26,29 @@ class MLPDecoder(Decoder):
     Generic MLP-based decoder for ScaleGMN embeddings.
     Mirrors the encoder to reconstruct the original signal/points.
     """
-    def __init__(self, latent_dim: int, hidden_dims: list, output_dim: int):
+    def __init__(self, model_args, **kwargs):
         super().__init__()
+        self.input_dim = model_args['d_input']
+        self.num_layers = model_args['num_layers']
+        self.hidden_dims = model_args['d_hidden']
+        self.data_layer_layout = model_args['data_layer_layout']
+        self.output_dim = sum(self.data_layer_layout)
+
         layers = []
-        prev = latent_dim
-        for h in hidden_dims:
+        prev = self.input_dim
+        for h in self.hidden_dims:
             layers.append(nn.Linear(prev, h))
             layers.append(nn.ReLU(inplace=True))
             prev = h
-        layers.append(nn.Linear(prev, output_dim))
+        layers.append(nn.Linear(prev, self.output_dim))
         self.net = nn.Sequential(*layers)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        z: Tensor of shape [B, latent_dim]
+        returns: Tensor of shape [B, output_dim]
+        """
+        return self.net(z)
 
 
 if __name__ == "__main__":

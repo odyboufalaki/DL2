@@ -13,6 +13,7 @@ from src.scalegmn.models import ScaleGMN
 from src.utils.loss import select_criterion
 from src.utils.optim import setup_optimization
 from src.utils.helpers import overwrite_conf, count_parameters, set_seed, mask_input, mask_hidden, count_named_parameters
+from src.scalegmn.decoder import MLPDecoder
 import wandb
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
@@ -112,6 +113,8 @@ def main(args=None):
     # =============================================================================================
     net = ScaleGMN(conf['scalegmn_args'])
     print(net)
+
+    decoder = MLPDecoder(conf['decoder'])
 
     cnt_p = count_parameters(net=net)
     if conf["wandb"]:

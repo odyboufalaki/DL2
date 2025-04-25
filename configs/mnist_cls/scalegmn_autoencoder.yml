@@ -17,7 +17,6 @@ train_args:
   seed: 0
   loss: CrossEntropyLoss
 
-
 scalegmn_args:
   d_in_v: &d_in_v 1  # initial dimension of input nn bias
   d_in_e: &d_in_e 1  # initial dimension of input nn weights
@@ -96,6 +95,11 @@ scalegmn_args:
     d_out: 10  # final dimension of readout Permutation Invariant Scale(Sign)Net - Number of Classes for classification tasks.
     d_rho: *d_hid  # intermediate dimension within Readout module
 
+decoder_args:
+  data_layer_layout: *layer_layout  # refer to layer_layout in the data section
+  d_input: *d_hid  # initial dimension of input nn bias
+  d_hidden: []  # hidden dimension
+  num_layers: 4 # number of layers to apply
 
 optimization:
   clip_grad: True
