@@ -46,7 +46,9 @@ def main(args=None):
                         debug=conf["debug"],
                         direction=conf['scalegmn_args']['direction'],
                         equiv_on_hidden=equiv_on_hidden,
-                        get_first_layer_mask=get_first_layer_mask)
+                        get_first_layer_mask=get_first_layer_mask, 
+                        return_wb = True
+                        )
     conf['scalegmn_args']["layer_layout"] = train_set.get_layer_layout()
 
     # augment train set for the Augmented CIFAR-10 experiment
@@ -72,7 +74,9 @@ def main(args=None):
                       # edge_pos_embed=conf['scalegmn_args']['graph_constructor']['edge_pos_embed'],
                       direction=conf['scalegmn_args']['direction'],
                       equiv_on_hidden=equiv_on_hidden,
-                      get_first_layer_mask=get_first_layer_mask)
+                      get_first_layer_mask=get_first_layer_mask,
+                      return_wb = True
+                      )
 
     test_set = dataset(conf['data'],
                         split='test',
@@ -81,7 +85,9 @@ def main(args=None):
                       # edge_pos_embed=conf['scalegmn_args']['graph_constructor']['edge_pos_embed'],
                       direction=conf['scalegmn_args']['direction'],
                         equiv_on_hidden=equiv_on_hidden,
-                        get_first_layer_mask=get_first_layer_mask)
+                        get_first_layer_mask=get_first_layer_mask,
+                        return_wb = True
+                        )
 
     print(f'Len train set: {len(train_set)}')
     print(f'Len val set: {len(val_set)}')
@@ -148,7 +154,7 @@ def main(args=None):
             net.train()
             curr_loss = 0
             len_dataloader = len(train_loader)
-            for i, batch in enumerate(tqdm(train_loader)):
+            for i, (batch, wb) in enumerate(tqdm(train_loader)):
                 step = epoch * len_dataloader + i
                 batch = batch.to(device)
 

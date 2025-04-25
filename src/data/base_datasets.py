@@ -46,7 +46,8 @@ class BaseDataset(torch.utils.data.Dataset, ABC):
             direction='forward',
             return_path=False,
             data_format="graph",
-            switch_to_canon=True
+            switch_to_canon=True,
+            return_wb=False
     ):
         super().__init__()
         self.dataset_name = dataset
@@ -63,7 +64,7 @@ class BaseDataset(torch.utils.data.Dataset, ABC):
 
         self.image_size = image_size
         self.return_path = return_path
-        self.return_wb = self.dataset_name == 'mnist_inr_edit'
+        self.return_wb = self.dataset_name == 'mnist_inr_edit' or return_wb
         self.switch_to_canon = switch_to_canon
 
         if self.switch_to_canon:
@@ -129,7 +130,6 @@ class BaseDataset(torch.utils.data.Dataset, ABC):
             hidden_nodes=self.hidden_nodes if self.equiv_on_hidden else None,
             first_layer_nodes=self.first_layer_nodes if self.get_first_layer_mask else None
         )
-
         if self.return_wb:
             w_b = Batch(weights=weights, biases=biases, label=label)
             return batch, w_b
