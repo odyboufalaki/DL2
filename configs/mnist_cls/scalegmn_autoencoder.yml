@@ -92,14 +92,13 @@ scalegmn_args:
     skip: False
 
   readout_args:
-    d_out: 10  # final dimension of readout Permutation Invariant Scale(Sign)Net - Number of Classes for classification tasks.
+    d_out: *d_hid  # final dimension of readout Permutation Invariant Scale(Sign)Net - Number of Classes for classification tasks.
     d_rho: *d_hid  # intermediate dimension within Readout module
 
 decoder_args:
   data_layer_layout: *layer_layout  # refer to layer_layout in the data section
   d_input: *d_hid  # initial dimension of input nn bias
   d_hidden: []  # hidden dimension
-  num_layers: 4 # number of layers to apply
 
 optimization:
   clip_grad: True
@@ -123,3 +122,10 @@ wandb_args:
   group: null
   name: null
   tags: null
+
+save_model:
+  save_model: True
+  save_dir: ./models/mnist_cls/scalegmn_autoencoder
+  save_name: scalegmn_autoencoder_mnist_cls.pt
+  save_best_only: True
+  save_last_only: False

@@ -13,7 +13,7 @@ from src.scalegmn.models import ScaleGMN
 from src.utils.loss import select_criterion
 from src.utils.optim import setup_optimization
 from src.utils.helpers import overwrite_conf, count_parameters, set_seed, mask_input, mask_hidden, count_named_parameters
-from src.scalegmn.decoder import MLPDecoder
+from src.scalegmn.autoencoder import MLPAutoencoder
 import wandb
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
@@ -111,14 +111,11 @@ def main(args=None):
     # =============================================================================================
     #   DEFINE MODEL
     # =============================================================================================
-    net = ScaleGMN(conf['scalegmn_args'])
-    print(net)
+    net = MLPAutoencoder(conf)
 
-    decoder = MLPDecoder(conf['decoder'])
-
-    cnt_p = count_parameters(net=net)
-    if conf["wandb"]:
-        wandb.log({'number of parameters': cnt_p}, step=0)
+    # cnt_p = count_parameters(net=net)
+    # if conf["wandb"]:
+    #     wandb.log({'number of parameters': cnt_p}, step=0)
 
     for p in net.parameters():
         p.requires_grad = True
@@ -198,6 +195,14 @@ def main(args=None):
                     best_test_results = test_loss_dict
                     best_val_results = val_loss_dict
                     best_train_results = train_loss_dict
+
+                # Save the model
+                if conf["save_model"]["save_model"]:
+                    if best_val_criteria and conf["save_model"]["save_best_only"]:
+                        torch.save(
+                            net.state_dict(),
+                            os.path.join(conf["save_model"]["save_dir"], conf["save_model"]["save_name"])
+                        )
 
                 best_train_criteria = train_loss_dict["avg_acc"] >= best_train_acc
                 if best_train_criteria:
