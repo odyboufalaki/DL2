@@ -8,6 +8,8 @@ from tqdm import tqdm, trange
 from torch.utils import data
 import torch_geometric
 import torch.distributed as dist
+from src.phase_canonicalization.test_inr import test_inr
+from src.scalegmn.inr import INR, reconstruct_inr, make_functional
 from src.utils.setup_arg_parser import setup_arg_parser
 from src.scalegmn.models import ScaleGMN
 from src.utils.loss import select_criterion
@@ -146,6 +148,8 @@ def main(args=None):
     best_test_results, best_val_results, best_train_results, best_train_results_TRAIN = None, None, None, None
     last_val_accs = []
     patience = conf['train_args']['patience']
+    inr = INR()
+    inr_func, _ = make_functional(inr)
     if extra_aug:
         # run experiment like in NFN to have comparable results.
         train_on_steps(net, train_loader, val_loader, test_loader, optimizer, scheduler, criterion, conf, device)
@@ -161,20 +165,18 @@ def main(args=None):
                 optimizer.zero_grad()
                 out = net(batch)
 
-                print(wb.biases[0].shape, wb.weights[0].shape)
+                #print(wb.biases[0].shape, wb.weights[0].shape)
 
-                reconstructed_wb = [net.decoder.reconstruct_inr_model(out[k], flatten_input=True) for k in range(out.shape[0])]
+                sd_batch_list = [net.decoder.reconstruct_inr_state_dict(out[k]) for k in range(out.shape[0])]
+                decoded_batched_images = reconstruct_inr(sd_batch_list,inr_func)
+                original_inrs = test_inr(wb.weights, wb.biases)
 
-                wb = [
-                    net.decoder.reconstruct_inr_model(
-                        [wb.weights[layer][k].squeeze(-1).permute(1, 0) for layer in range(len(wb.weights))],
-                        [wb.biases[layer][k].squeeze(-1) for layer in range(len(wb.biases))]
-                    )
-                    for k in range(out.shape[0])
-                ]
-
+                loss = criterion(decoded_batched_images, original_inrs)
+                print(f"loss: {loss.item()}")
+                print(f"decoded_batched_images: {decoded_batched_images.shape}")
+                print(f"original_inrs: {original_inrs.shape}")
                 exit(0)
-                loss = criterion(reconstructed_wb, wb, batch.label)
+                curr_loss += loss.item()
                 loss.backward()
                 log = {}
                 if conf['optimization']['clip_grad']:

@@ -15,7 +15,7 @@ train_args:
   val_acc_threshold: 0.1
   patience: 50
   seed: 0
-  loss: ReconstructionLoss
+  loss: MSE
 
 scalegmn_args:
   d_in_v: &d_in_v 1  # initial dimension of input nn bias

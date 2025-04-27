@@ -55,7 +55,7 @@ class MLPDecoder(Decoder):
         """
         return self.net(z)
 
-    def reconstruct_inr_model_flatten(
+    def reconstruct_inr_state_dict(
         self,
         params_flatten: torch.Tensor,
         *,
@@ -65,7 +65,7 @@ class MLPDecoder(Decoder):
         out_features: int = 1,
         ) -> nn.Module:
         """
-        Reconstruct an INR model from a flat parameter vector.
+        Reconstruct the state dict of an INR model from a flat parameter vector.
 
         Args:
             flat_params:     1D tensor containing all weights & biases for an INR with this arch.
@@ -76,7 +76,8 @@ class MLPDecoder(Decoder):
             fix_pe:          INR.__init__ fix_pe
 
         Returns:
-            A new INR instance whose parameters are set to flat_params.
+            new_sd:         state_dict of the INR model with the same architecture as the original
+                            but with the weights and biases replaced by those in flat_params.
         """
         # Instantiate fresh INR
         model = INR(
@@ -104,111 +105,10 @@ class MLPDecoder(Decoder):
             new_sd[name] = new_tensor
 
         # Load into model
-        model.load_state_dict(new_sd)
+        #model.load_state_dict(new_sd)
 
-        return model
+        return new_sd
     
-
-    def reconstruct_inr_model(
-        self,
-        weights: list[torch.Tensor],
-        biases: list[torch.Tensor],
-        *,
-        in_features: int = 2,
-        n_layers: int = 3,
-        hidden_features: int = 32,
-        out_features: int = 1,
-        ) -> nn.Module:
-        """
-        Reconstruct an INR model from a Batch object.
-        """
-        model = INR(
-            in_features=in_features,
-            n_layers=n_layers,
-            hidden_features=hidden_features,
-            out_features=out_features
-        )
-        # Build a new state_dict mapping names → tensors
-        sd = model.state_dict()
-        new_sd = {}
-        
-        dictionary_keys = list(sd.keys())
-
-        for k in range(len(sd.items()) // 2):
-            # Update weights
-            weights_name = dictionary_keys[2 * k]
-            new_sd[weights_name] = weights[k]
-
-            # Update biases
-            biases_name = dictionary_keys[2 * k + 1]
-            new_sd[biases_name] = biases[k]
-
-        # Load into model
-        model.load_state_dict(new_sd)
-        for name, param in model.state_dict().items():
-            print(f"{name}: {param.shape}")
-
-        return model
-
-
-    def inr_mse(
-        flat_params: torch.Tensor,
-        target_img: torch.Tensor,
-        *,
-        reconstruct_fn,        # your `reconstruct_inr_model` or similar factory
-        in_features: int = 2,
-        n_layers: int = 3,
-        hidden_features: int = 32,
-        out_features: int = 1,
-        pe_features=None,
-        fix_pe=True,
-        ) -> torch.Tensor:
-        """
-        Compute MSE between INR reconstruction and a target 28x28 image.
-
-        Args:
-            flat_params:   (P,) tensor of all INR weights & biases.
-            target_img:    (28,28) or (1,28,28) tensor with pixel values ∈ [0,1].
-            reconstruct_fn:callable, e.g. your `reconstruct_inr_model`.
-            in_features, n_layers, hidden_features, out_features, pe_features, fix_pe:
-                        INR hyper-parameters (must match how flat_params was produced).
-
-        Returns:
-            A 0-dim tensor = mean squared error over the 28x28 grid.
-        """
-        # rebuild a model with those params
-        model = reconstruct_fn(
-            flat_params,
-            in_features=in_features,
-            n_layers=n_layers,
-            hidden_features=hidden_features,
-            out_features=out_features,
-        )
-
-        # make a (1, 28*28, 2) coord tensor and push through
-        coords = make_coordinates((28, 28), bs=1).to(flat_params.device)  # → (1, 784, 2)
-        pred = model(coords)                                             # → (1, 784, 1)
-        pred = pred.view(1, 28, 28)                                      # → (1, 28, 28)
-
-        # if target is (28,28) make it (1,28,28)
-        if target_img.ndim == 2:
-            target_img = target_img.unsqueeze(0)
-
-        # compute MSE
-        return F.mse_loss(pred, target_img)
-    
-
-    # def batch_inr_mse(
-    # flat_params_batch: torch.Tensor,   # (B, P)
-    # target_imgs: torch.Tensor,         # (B, 28, 28) or (B,1,28,28)
-    # reconstruct_fn,                    # same as above
-    # **inr_kwargs
-    # ) -> torch.Tensor:
-    #     losses = []
-    #     for fp, tgt in zip(flat_params_batch, target_imgs):
-    #         losses.append(inr_mse(fp, tgt, reconstruct_fn=reconstruct_fn, **inr_kwargs))
-    #     return torch.stack(losses).mean()  # overall mean across batch
-
 
 class Autoencoder(nn.Module, ABC):
     """
