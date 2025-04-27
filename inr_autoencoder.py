@@ -16,6 +16,8 @@ from src.utils.loss import select_criterion
 from src.utils.optim import setup_optimization
 from src.utils.helpers import overwrite_conf, count_parameters, set_seed, mask_input, mask_hidden, count_named_parameters
 from src.scalegmn.autoencoder import MLPAutoencoder
+from src.data.base_datasets import Batch
+from src.scalegmn.autoencoder import create_batch_wb
 import wandb
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
@@ -165,17 +167,16 @@ def main(args=None):
                 optimizer.zero_grad()
                 out = net(batch)
 
-                #print(wb.biases[0].shape, wb.weights[0].shape)
+                # Reconstruct original images
+                original_imgs = test_inr(wb.weights, wb.biases, permuted_weights=True)
 
-                sd_batch_list = [net.decoder.reconstruct_inr_state_dict(out[k]) for k in range(out.shape[0])]
-                decoded_batched_images = reconstruct_inr(sd_batch_list,inr_func)
-                original_inrs = test_inr(wb.weights, wb.biases)
+                # Reconstruct autoencoder images
+                reconstructed_weights, recontructed_biases = create_batch_wb(out)
+                recontructed_imgs = test_inr(reconstructed_weights, recontructed_biases)
 
-                loss = criterion(decoded_batched_images, original_inrs)
+                loss = criterion(recontructed_imgs, original_imgs)
                 print(f"loss: {loss.item()}")
-                print(f"decoded_batched_images: {decoded_batched_images.shape}")
-                print(f"original_inrs: {original_inrs.shape}")
-                exit(0)
+
                 curr_loss += loss.item()
                 loss.backward()
                 log = {}
@@ -220,10 +221,10 @@ def main(args=None):
                 # Save the model
                 if conf["save_model"]["save_model"]:
                     if best_val_criteria and conf["save_model"]["save_best_only"]:
-                        torch.save(
-                            net.state_dict(),
-                            os.path.join(conf["save_model"]["save_dir"], conf["save_model"]["save_name"])
-                        )
+                        save_path = conf["save_model"]["save_dir"] + "/" + conf["save_model"]["save_name"]
+                        if not os.path.exists(conf["save_model"]["save_dir"]):
+                            os.makedirs(conf["save_model"]["save_dir"], exist_ok=True)
+                        torch.save(net.state_dict(), save_path)
 
                 best_train_criteria = train_loss_dict["avg_acc"] >= best_train_acc
                 if best_train_criteria:

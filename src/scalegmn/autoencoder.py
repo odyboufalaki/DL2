@@ -5,6 +5,70 @@ from ..data.base_datasets import Batch
 from .models import ScaleGMN
 from .inr import *
 
+
+def create_batch_wb(
+    params_flatten: list[torch.Tensor],
+    *,
+    in_features: int = 2,
+    n_layers: int = 3,
+    hidden_features: int = 32,
+    out_features: int = 1,
+    ) -> nn.Module:
+    """
+    Reconstruct the state dict of an INR model from a flat parameter vector.
+
+    Args:
+        params_flatten:  1D tensor containing all weights & biases for an INR with this arch.
+        in_features:     INR.__init__ in_features
+        n_layers:        INR.__init__ n_layers
+        hidden_features: INR.__init__ hidden_features
+        out_features:    INR.__init__ out_features
+        fix_pe:          INR.__init__ fix_pe
+
+    Returns:
+        new_sd:         state_dict of the INR model with the same architecture as the original
+                        but with the weights and biases replaced by those in flat_params.
+    """
+    # Instantiate fresh INR
+    model = INR(
+        in_features=in_features,
+        n_layers=n_layers,
+        hidden_features=hidden_features,
+        out_features=out_features
+    )
+
+    # Break out its native params → shapes
+    _, init_params = make_functional(model)
+    _, shapes = params_to_tensor(init_params)
+
+    batch_params_tuple = [tensor_to_params(params_flatten[k], shapes) for k in range(len(params_flatten))]
+
+    batch_size = len(params_flatten)
+
+    weights, biases = [], []
+    for layer_k in range(len(shapes) // 2):
+        weights_layer_k = torch.Tensor(shapes[2 * layer_k])
+        weights_layer_k.unsqueeze(0)
+
+        biases_layer_k = torch.Tensor(shapes[2 * layer_k + 1])
+        biases_layer_k.unsqueeze(0)
+
+        weights_layer_k = torch.cat(
+            [batch_params_tuple[item][2 * layer_k].unsqueeze(0) for item in range(batch_size)],
+            dim=0
+        )
+
+        biases_layer_k = torch.cat(
+            [batch_params_tuple[item][2 * layer_k + 1].unsqueeze(0) for item in range(batch_size)],
+            dim=0
+        )
+
+        weights.append(weights_layer_k.unsqueeze(-1))
+        biases.append(biases_layer_k.unsqueeze(-1))
+
+    return weights, biases
+
+
 class Decoder(nn.Module, ABC):
     """
     Abstract base class for decoders in ScaleGMN.
@@ -55,60 +119,6 @@ class MLPDecoder(Decoder):
         """
         return self.net(z)
 
-    def reconstruct_inr_state_dict(
-        self,
-        params_flatten: torch.Tensor,
-        *,
-        in_features: int = 2,
-        n_layers: int = 3,
-        hidden_features: int = 32,
-        out_features: int = 1,
-        ) -> nn.Module:
-        """
-        Reconstruct the state dict of an INR model from a flat parameter vector.
-
-        Args:
-            flat_params:     1D tensor containing all weights & biases for an INR with this arch.
-            in_features:     INR.__init__ in_features
-            n_layers:        INR.__init__ n_layers
-            hidden_features: INR.__init__ hidden_features
-            out_features:    INR.__init__ out_features
-            fix_pe:          INR.__init__ fix_pe
-
-        Returns:
-            new_sd:         state_dict of the INR model with the same architecture as the original
-                            but with the weights and biases replaced by those in flat_params.
-        """
-        # Instantiate fresh INR
-        model = INR(
-            in_features=in_features,
-            n_layers=n_layers,
-            hidden_features=hidden_features,
-            out_features=out_features
-        )
-
-        # Break out its native params → shapes
-        _, init_params = make_functional(model)
-        _, shapes = params_to_tensor(init_params)
-
-        new_params_tuple = tensor_to_params(params_flatten, shapes)
-
-        # Build a new state_dict mapping names → tensors
-        sd = model.state_dict()
-        new_sd = {}
-        for (name, orig_tensor), new_tensor in zip(sd.items(), new_params_tuple):
-            # ensure the shapes line up
-            assert orig_tensor.shape == new_tensor.shape, (
-                f"shape mismatch for {name}: "
-                f"{orig_tensor.shape} vs {new_tensor.shape}"
-            )
-            new_sd[name] = new_tensor
-
-        # Load into model
-        #model.load_state_dict(new_sd)
-
-        return new_sd
-    
 
 class Autoencoder(nn.Module, ABC):
     """
