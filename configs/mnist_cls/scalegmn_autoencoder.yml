@@ -28,7 +28,7 @@ scalegmn_args:
   jit: False # prefer compile - compile gnn to optimize performance
   compile: False # compile gnn to optimize performance
 
-  readout_range: last_layer  # or full_graph
+  readout_range: full_graph  # or full_graph
   gnn_skip_connections: True
 
   concat_mlp_directions: False  # only for bidirectional: apply an MLP before concatenating the forward and backward directions
@@ -98,7 +98,7 @@ scalegmn_args:
 decoder_args:
   data_layer_layout: [2, 32, 32, 1]  # explicitly define the layer layout
   d_input: *d_hid  # initial dimension of input nn bias
-  d_hidden: [256, 512]  # hidden dimension
+  d_hidden: [256, 512, 1024]  # hidden dimension
   activation: silu  # activation function
 
 optimization:
@@ -106,7 +106,7 @@ optimization:
   clip_grad_max_norm: 10.0
   optimizer_name: AdamW
   optimizer_args:
-    lr: 1e-5
+    lr: 1e-2
     weight_decay: 0.01
   scheduler_args:
     scheduler: WarmupLRScheduler

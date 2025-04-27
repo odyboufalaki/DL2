@@ -98,10 +98,7 @@ class MLPDecoder(Decoder):
         self.hidden_dims = model_args['d_hidden']
         self.num_layers = len(self.hidden_dims)
         self.data_layer_layout = model_args['data_layer_layout']
-        self.output_dim = sum([
-            (self.data_layer_layout[i_layer] + 1) * self.data_layer_layout[i_layer + 1]
-            for i_layer in range(len(self.data_layer_layout) - 1)
-        ])
+        self.output_dim = model_args['output_dim']
         self.activation = model_args['activation']
 
         self.net = mlp(
@@ -139,13 +136,49 @@ class Autoencoder(nn.Module, ABC):
         return self.decoder(z)
 
 
-class MLPAutoencoder(Autoencoder):
+def get_autoencoder(model_args, autoencoder_type: str, **kwargs):
+    _map = {
+        "inr": _MLPAutoencoderINR,
+        "pixels": _MLPAutoencoderPixels,
+    }
+    autoencoder_class = _map.get(autoencoder_type, None)
+    if autoencoder_class is None:
+        raise ValueError(f"Unknown class name: {autoencoder_type}.")
+    return autoencoder_class(model_args, **kwargs)
+
+
+class _MLPAutoencoderINR(Autoencoder):
     """
     Generic MLP-based autoencoder for ScaleGMN embeddings.
     Mirrors the encoder to reconstruct the original signal/points.
     """
     def __init__(self, model_args, **kwargs):
         super().__init__()
+        self.data_layer_layout = model_args["decoder_args"]['data_layer_layout']
+        model_args["decoder_args"]["output_dim"] = sum([
+            (self.data_layer_layout[i_layer] + 1) * self.data_layer_layout[i_layer + 1]
+            for i_layer in range(len(self.data_layer_layout) - 1)
+        ])
+        self.encoder = ScaleGMN(model_args["scalegmn_args"], **kwargs)
+        self.decoder = MLPDecoder(model_args["decoder_args"], **kwargs)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: Tensor of shape [B, input_dim]
+        returns: Tensor of shape [B, output_dim]
+        """
+        z = self.encoder(x)
+        return self.decoder(z)
+
+
+class _MLPAutoencoderPixels(Autoencoder):
+    """
+    Generic MLP-based autoencoder for ScaleGMN embeddings.
+    Mirrors the encoder to reconstruct the original signal/points.
+    """
+    def __init__(self, model_args, **kwargs):
+        super().__init__()
+        model_args["decoder_args"]["output_dim"] = torch.prod(torch.tensor(model_args["data"]["image_size"])).item()
         self.encoder = ScaleGMN(model_args["scalegmn_args"], **kwargs)
         self.decoder = MLPDecoder(model_args["decoder_args"], **kwargs)
 

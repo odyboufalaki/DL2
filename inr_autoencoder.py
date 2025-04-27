@@ -15,12 +15,14 @@ from src.scalegmn.models import ScaleGMN
 from src.utils.loss import select_criterion
 from src.utils.optim import setup_optimization
 from src.utils.helpers import overwrite_conf, count_parameters, set_seed, mask_input, mask_hidden, count_named_parameters
-from src.scalegmn.autoencoder import MLPAutoencoder
+from src.scalegmn.autoencoder import get_autoencoder
 from src.data.base_datasets import Batch
+from torchvision.utils import save_image
 from src.scalegmn.autoencoder import create_batch_wb
 import wandb
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
+AUTOENCODER_TYPE = "inr"
 
 def main(args=None):
 
@@ -121,7 +123,8 @@ def main(args=None):
     # =============================================================================================
     #   DEFINE MODEL
     # =============================================================================================
-    net = MLPAutoencoder(conf)
+    # Get an instance of the autoencoder model
+    net = get_autoencoder(model_args=conf, autoencoder_type=AUTOENCODER_TYPE)
 
     # cnt_p = count_parameters(net=net)
     # if conf["wandb"]:
@@ -169,10 +172,16 @@ def main(args=None):
                 original_imgs = test_inr(wb.weights, wb.biases, permuted_weights=True)
 
                 # Reconstruct autoencoder images
-                reconstructed_weights, recontructed_biases = create_batch_wb(out)
-                recontructed_imgs = test_inr(reconstructed_weights, recontructed_biases)
+                if AUTOENCODER_TYPE == "inr":
+                    # reconstructed_weights, recontructed_biases = create_batch_wb(out)
+                    reconstructed_imgs = test_inr(*create_batch_wb(out))
+                elif AUTOENCODER_TYPE == "pixels":
+                    reconstructed_imgs = out.view(len(batch), *(tuple(conf["data"]["image_size"])))
+                    save_image([reconstructed_imgs[0].squeeze(-1)], "reconstructed_inr.png")                    
+                else:
+                    raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
 
-                loss = criterion(recontructed_imgs, original_imgs)
+                loss = criterion(reconstructed_imgs, original_imgs)
                 print(f"loss: {loss.item()}")
 
                 curr_loss += loss.item()
