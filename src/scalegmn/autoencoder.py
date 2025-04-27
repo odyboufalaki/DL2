@@ -4,7 +4,7 @@ from abc import ABC
 from ..data.base_datasets import Batch
 from .models import ScaleGMN
 from .inr import *
-
+from .mlp import mlp
 
 def create_batch_wb(
     params_flatten: list[torch.Tensor],
@@ -93,7 +93,7 @@ class MLPDecoder(Decoder):
     Mirrors the encoder to reconstruct the original signal/points.
     """
     def __init__(self, model_args, **kwargs):
-        super().__init__()
+        Decoder.__init__(self)
         self.input_dim = model_args['d_input']
         self.hidden_dims = model_args['d_hidden']
         self.num_layers = len(self.hidden_dims)
@@ -102,15 +102,14 @@ class MLPDecoder(Decoder):
             (self.data_layer_layout[i_layer] + 1) * self.data_layer_layout[i_layer + 1]
             for i_layer in range(len(self.data_layer_layout) - 1)
         ])
+        self.activation = model_args['activation']
 
-        layers = []
-        prev = self.input_dim
-        for h in self.hidden_dims:
-            layers.append(nn.Linear(prev, h))
-            layers.append(nn.ReLU(inplace=True))
-            prev = h
-        layers.append(nn.Linear(prev, self.output_dim))
-        self.net = nn.Sequential(*layers)
+        self.net = mlp(
+            in_features=self.input_dim,
+            out_features=self.output_dim,
+            d_k=self.hidden_dims,
+            activation=self.activation,
+        )
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         """

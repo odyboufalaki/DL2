@@ -98,14 +98,15 @@ scalegmn_args:
 decoder_args:
   data_layer_layout: [2, 32, 32, 1]  # explicitly define the layer layout
   d_input: *d_hid  # initial dimension of input nn bias
-  d_hidden: []  # hidden dimension
+  d_hidden: [256, 512]  # hidden dimension
+  activation: silu  # activation function
 
 optimization:
   clip_grad: True
   clip_grad_max_norm: 10.0
   optimizer_name: AdamW
   optimizer_args:
-    lr: 1e-3
+    lr: 1e-5
     weight_decay: 0.01
   scheduler_args:
     scheduler: WarmupLRScheduler
