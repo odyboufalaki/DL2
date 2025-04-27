@@ -150,8 +150,6 @@ def main(args=None):
     best_test_results, best_val_results, best_train_results, best_train_results_TRAIN = None, None, None, None
     last_val_accs = []
     patience = conf['train_args']['patience']
-    inr = INR()
-    inr_func, _ = make_functional(inr)
     if extra_aug:
         # run experiment like in NFN to have comparable results.
         train_on_steps(net, train_loader, val_loader, test_loader, optimizer, scheduler, criterion, conf, device)

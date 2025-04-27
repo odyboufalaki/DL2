@@ -17,7 +17,7 @@ def setup_arg_parser():
     parser.add_argument('--num_threads', type=int, default=1)
     # specify training parameters
     parser.add_argument("--debug", type=str2bool, help="Use a subset of a few datapoints, meant for debugging.", default=False)
-    parser.add_argument("--validate", type=str2bool, help="Whether to validate on val split after every epoch.", default=True)
+    parser.add_argument("--validate", type=str2bool, help="Whether to validate on val split after every epoch.", default=False)
     parser.add_argument("--gpu-ids", nargs="+", type=int, default=0, help="List of ids of GPUs to use.")
     # wandb
     parser.add_argument("--wandb", type=str2bool, help="Log results to wandb.", default=False)
