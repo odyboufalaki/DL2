@@ -115,7 +115,7 @@ optimization:
 
 wandb_args:
   project: fmnist_cls
-  entity: null
+  entity: scale-gmns
   group: null
   name: null
   tags: null

@@ -114,8 +114,8 @@ optimization:
     min_lr: None
 
 wandb_args:
-  project: fmnist_cls
-  entity: null
+  project: fmnist_cls_bidir
+  entity: scale-gmns
   group: null
   name: null
   tags: null
