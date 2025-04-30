@@ -202,15 +202,18 @@ def main(args=None):
     # =============================================================================================
     # TRAINING LOOP
     # =============================================================================================
-    best_val_acc = -1
-    best_train_acc = -1
+    #best_val_acc = -1
+    #best_train_acc = -1
+    best_val_loss = float("inf")
+    best_train_loss = float("inf")
     (
         best_test_results,
         best_val_results,
         best_train_results,
         best_train_results_TRAIN,
     ) = (None, None, None, None)
-    last_val_accs = []
+    #last_val_accs = []
+    last_val_losses = []
     patience = effective_conf["train_args"]["patience"]  # Use effective_conf
     if extra_aug:
         # run experiment like in NFN to have comparable results.
@@ -300,16 +303,18 @@ def main(args=None):
             #############################################
             if effective_conf["validate"]:  # Use effective_conf
                 print(f"\nValidation after epoch {epoch}:")
-                val_loss_dict = evaluate(net, val_loader, device=device)
-                test_loss_dict = evaluate(net, test_loader, device=device)
+                val_loss_dict = evaluate(net, val_loader, effective_conf["data"]["image_size"], criterion,  device=device)
+                test_loss_dict = evaluate(net, test_loader, effective_conf["data"]["image_size"], criterion, device=device)
                 val_loss = val_loss_dict["avg_loss"]
-                val_acc = val_loss_dict["avg_acc"]
+                #val_acc = val_loss_dict["avg_acc"]
                 test_loss = test_loss_dict["avg_loss"]
-                test_acc = test_loss_dict["avg_acc"]
+                #test_acc = test_loss_dict["avg_acc"]
 
                 train_loss_dict = evaluate(
                     net,
                     train_loader,
+                    effective_conf["data"]["image_size"],
+                    criterion,
                     train_set,
                     num_samples=len(val_set),
                     batch_size=effective_conf["batch_size"],
@@ -317,10 +322,9 @@ def main(args=None):
                     device=device,
                 )  # Use effective_conf
 
-                best_val_criteria = val_acc >= best_val_acc
-
+                best_val_criteria = val_loss <= best_val_loss
                 if best_val_criteria:
-                    best_val_acc = val_acc
+                    best_val_loss = val_loss
                     best_test_results = test_loss_dict
                     best_val_results = val_loss_dict
                     best_train_results = train_loss_dict
@@ -344,15 +348,15 @@ def main(args=None):
                             )  # Use effective_conf
                         torch.save(net.state_dict(), save_path)
 
-                best_train_criteria = train_loss_dict["avg_acc"] >= best_train_acc
+                best_train_criteria = train_loss_dict["avg_loss"] <= best_train_loss
                 if best_train_criteria:
-                    best_train_acc = train_loss_dict["avg_acc"]
+                    best_train_loss= train_loss_dict["avg_loss"]
                     best_train_results_TRAIN = train_loss_dict
 
                 if run:  # Check if wandb run exists
                     log = {
                         "train/avg_loss": train_loss_dict["avg_loss"],
-                        "train/acc": train_loss_dict["avg_acc"],
+                        #"train/acc": train_loss_dict["avg_acc"],
                         # "train/conf_mat": wandb.plot.confusion_matrix(
                         #     probs=None,
                         #     y_true=train_loss_dict["gt"],
@@ -360,17 +364,17 @@ def main(args=None):
                         #     class_names=range(10),
                         # ), # Commented out as confusion matrix depends on task type
                         "train/best_loss": best_train_results["avg_loss"],
-                        "train/best_acc": best_train_results["avg_acc"],
+                        #"train/best_acc": best_train_results["avg_acc"],
                         "train/best_loss_TRAIN_based": best_train_results_TRAIN[
                             "avg_loss"
                         ],
-                        "train/best_acc_TRAIN_based": best_train_results_TRAIN[
-                            "avg_acc"
-                        ],
+                        #"train/best_acc_TRAIN_based": best_train_results_TRAIN[
+                        #    "avg_acc"
+                        #],
                         "val/loss": val_loss,
-                        "val/acc": val_acc,  # This is the metric needed for the sweep
+                        #"val/acc": val_acc,  # This is the metric needed for the sweep
                         "val/best_loss": best_val_results["avg_loss"],
-                        "val/best_acc": best_val_results["avg_acc"],
+                        #"val/best_acc": best_val_results["avg_acc"],
                         # "val/conf_mat": wandb.plot.confusion_matrix(
                         #     probs=None,
                         #     y_true=val_loss_dict["gt"],
@@ -378,9 +382,9 @@ def main(args=None):
                         #     class_names=range(10),
                         # ), # Commented out as confusion matrix depends on task type
                         "test/loss": test_loss,
-                        "test/acc": test_acc,
+                        #"test/acc": test_acc,
                         "test/best_loss": best_test_results["avg_loss"],
-                        "test/best_acc": best_test_results["avg_acc"],
+                        #"test/best_acc": best_test_results["avg_acc"],
                         # "test/conf_mat": wandb.plot.confusion_matrix(
                         #     probs=None,
                         #     y_true=test_loss_dict["gt"],
@@ -394,16 +398,16 @@ def main(args=None):
 
                 net.train()
 
-                last_val_accs.append(val_acc)
+                last_val_losses.append(val_loss)
                 # Keep only the last accuracies
-                if len(last_val_accs) > patience:
-                    last_val_accs.pop(0)
+                if len(last_val_losses) > patience:
+                    last_val_losses.pop(0)
                 # Check if the accuracies are decreasing
-                if len(last_val_accs) == patience and all(
-                    x > y for x, y in zip(last_val_accs, last_val_accs[1:])
+                if len(last_val_losses) == patience and all(
+                    x < y for x, y in zip(last_val_losses, last_val_losses[1:])
                 ):
                     print(
-                        f"Validation accuracy has been dropping for {patience} consecutive epochs:\n{last_val_accs}\nExiting."
+                        f"Validation loss has been increasing for {patience} consecutive epochs:\n{last_val_losses}\nExiting."
                     )
                     if run:
                         wandb.finish()  # Finish W&B run
@@ -416,12 +420,15 @@ def main(args=None):
 @torch.no_grad()
 def evaluate(
     model,
-    loader,
+    loader, 
+    image_size,
+    criterion,
     eval_dataset=None,
     num_samples=0,
     batch_size=0,
     num_workers=8,
     device=None,
+   
 ):
     if eval_dataset is not None:
         # only when also evaluating on train split. Since it is a lot bigger, we only evaluate on a smaller subset.
@@ -437,25 +444,48 @@ def evaluate(
         )
 
     model.eval()
-    loss = 0.0
-    correct = 0.0
+    total_loss = 0.0
     total = 0.0
-    predicted, gt = [], []
-    for batch, wb in loader:
+    for i, (batch, wb) in enumerate(tqdm(loader)):
         batch = batch.to(device)
         out = model(batch)
-        loss += F.cross_entropy(out, batch.label, reduction="sum")
-        total += len(batch.label)
-        pred = out.argmax(1)
-        correct += pred.eq(batch.label).sum()
-        predicted.extend(pred.cpu().numpy().tolist())
-        gt.extend(batch.label.cpu().numpy().tolist())
+        #step = epoch * len_dataloader + i
+        # Move weights and biases to the target device
+        weights_dev = [w.to(device) for w in wb.weights]
+        biases_dev = [b.to(device) for b in wb.biases]
+
+        # Reconstruct original images using tensors on the correct device - DO NOT SAVE
+        original_imgs = test_inr(
+            weights_dev, biases_dev, permuted_weights=True, save=True
+        )
+
+        # Reconstruct autoencoder images - SAVE THIS ONE
+        if AUTOENCODER_TYPE == "inr":
+            w_recon, b_recon = create_batch_wb(
+                out
+            )  # Use default out_features=1
+            reconstructed_imgs = test_inr(
+                w_recon, b_recon, save=True, img_name="autoencoder_recon"
+            )  # Save with specific name
+        elif AUTOENCODER_TYPE == "pixels":
+            reconstructed_imgs = out.view(
+                len(batch), *(tuple(image_size))
+            )  # Use effective_conf
+            save_image(
+                [reconstructed_imgs[0].squeeze(-1)], "reconstructed_inr.png"
+            )
+        else:
+            raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
+
+        loss = criterion(reconstructed_imgs, original_imgs)
+        total_loss += loss.item()
+        total += len(batch)
 
     model.train()
-    avg_loss = loss / total
-    avg_acc = correct / total
+    avg_loss = total_loss / total
+   
 
-    return dict(avg_loss=avg_loss, avg_acc=avg_acc, predicted=predicted, gt=gt)
+    return dict(avg_loss=avg_loss) 
 
 
 def train_on_steps(
