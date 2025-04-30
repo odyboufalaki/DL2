@@ -11,7 +11,7 @@ data:
   switch_to_canon: True
 
 train_args:
-  num_epochs: 200
+  num_epochs: 10
   val_acc_threshold: 0.1
   patience: 50
   seed: 0
@@ -98,7 +98,7 @@ scalegmn_args:
 decoder_args:
   data_layer_layout: [2, 32, 32, 1]  # explicitly define the layer layout
   d_input: *d_hid  # initial dimension of input nn bias
-  d_hidden: [256, 512, 1024]  # hidden dimension
+  d_hidden: [256]  # hidden dimension
   activation: silu  # activation function
 
 optimization:

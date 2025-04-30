@@ -14,109 +14,154 @@ from src.utils.setup_arg_parser import setup_arg_parser
 from src.scalegmn.models import ScaleGMN
 from src.utils.loss import select_criterion
 from src.utils.optim import setup_optimization
-from src.utils.helpers import overwrite_conf, count_parameters, set_seed, mask_input, mask_hidden, count_named_parameters
+from src.utils.helpers import (
+    overwrite_conf,
+    count_parameters,
+    set_seed,
+    mask_input,
+    mask_hidden,
+    count_named_parameters,
+)
 from src.scalegmn.autoencoder import get_autoencoder
 from src.data.base_datasets import Batch
 from torchvision.utils import save_image
 from src.scalegmn.autoencoder import create_batch_wb
 import wandb
+
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
 AUTOENCODER_TYPE = "inr"
 
+
 def main(args=None):
 
-    # read config file
+    # 1. Read base config file
     conf = yaml.safe_load(open(args.conf))
+    # 2. Overwrite base config with command-line arguments (if any)
     conf = overwrite_conf(conf, vars(args))
 
-    torch.set_float32_matmul_precision('high')
+    # 3. Initialize W&B (if enabled)
+    #    - W&B automatically merges sweep parameters with the provided 'config'.
+    #    - 'wandb.config' will hold the final, merged configuration.
+    if conf.get("wandb", False):
+        run = wandb.init(config=conf, **conf.get("wandb_args", {}))
+        # Use wandb.config as the effective configuration
+        effective_conf = wandb.config
+    else:
+        # If not using wandb, the original conf is the effective config
+        effective_conf = conf
+        run = None  # No wandb run object
 
-    # print(yaml.dump(conf, default_flow_style=False))
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Use 'effective_conf' consistently from here onwards
+    torch.set_float32_matmul_precision("high")
 
-    if conf["wandb"]:
-        wandb.init(config=conf, **conf["wandb_args"])
+    # print(yaml.dump(effective_conf, default_flow_style=False)) # Use effective_conf
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif (
+        torch.cuda.is_available()
+    ):  # Keep cuda check for cross-compatibility if needed elsewhere
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
 
-    set_seed(conf['train_args']['seed'])
+    print(f"Using device: {device}")
+    # Wandb logging setup (already uses wandb.init implicitly if run exists)
+
+    set_seed(effective_conf["train_args"]["seed"])  # Use effective_conf
 
     # =============================================================================================
     #   SETUP DATASET AND DATALOADER
     # =============================================================================================
-    extra_aug = conf['data'].pop('extra_aug') if 'extra_aug' in conf['data'] else 0
-    equiv_on_hidden = mask_hidden(conf)
-    get_first_layer_mask = mask_input(conf)
+    extra_aug = (
+        effective_conf["data"].pop("extra_aug")
+        if "extra_aug" in effective_conf["data"]
+        else 0
+    )  # Use effective_conf
+    equiv_on_hidden = mask_hidden(effective_conf)  # Use effective_conf
+    get_first_layer_mask = mask_input(effective_conf)  # Use effective_conf
 
-    train_set = dataset(conf['data'],
-                        split='train',
-                        debug=conf["debug"],
-                        direction=conf['scalegmn_args']['direction'],
-                        equiv_on_hidden=equiv_on_hidden,
-                        get_first_layer_mask=get_first_layer_mask, 
-                        return_wb = True
-                        )
-    conf['scalegmn_args']["layer_layout"] = train_set.get_layer_layout()
+    train_set = dataset(
+        effective_conf["data"],  # Use effective_conf
+        split="train",
+        debug=effective_conf["debug"],  # Use effective_conf
+        direction=effective_conf["scalegmn_args"]["direction"],  # Use effective_conf
+        equiv_on_hidden=equiv_on_hidden,
+        get_first_layer_mask=get_first_layer_mask,
+        return_wb=True,
+    )
+    effective_conf["scalegmn_args"][
+        "layer_layout"
+    ] = train_set.get_layer_layout()  # Use effective_conf
 
     # augment train set for the Augmented CIFAR-10 experiment
-    if extra_aug > 0 and conf['data']['dataset'] == 'cifar_inr':
+    if (
+        extra_aug > 0 and effective_conf["data"]["dataset"] == "cifar_inr"
+    ):  # Use effective_conf
         aug_dsets = []
         for i in range(extra_aug):
-            aug_dsets.append(dataset(conf['data'],
-                                     split='train',
-                                     debug=conf["debug"],
-                                     prefix=f"randinit_smaller_aug{i}",
-                                     direction=conf['scalegmn_args']['direction'],
-                                     equiv_on_hidden=equiv_on_hidden,
-                                     get_first_layer_mask=get_first_layer_mask
-                                     )
-                                    )
+            aug_dsets.append(
+                dataset(
+                    effective_conf["data"],  # Use effective_conf
+                    split="train",
+                    debug=effective_conf["debug"],  # Use effective_conf
+                    prefix=f"randinit_smaller_aug{i}",
+                    direction=effective_conf["scalegmn_args"][
+                        "direction"
+                    ],  # Use effective_conf
+                    equiv_on_hidden=equiv_on_hidden,
+                    get_first_layer_mask=get_first_layer_mask,
+                )
+            )
         train_set = data.ConcatDataset([train_set] + aug_dsets)
         print(f"Augmented training set with {len(train_set)} examples.")
 
-    val_set = dataset(conf['data'],
-                      split='val',
-                      debug=conf["debug"],
-                      # node_pos_embed=conf['scalegmn_args']['graph_constructor']['node_pos_embed'],
-                      # edge_pos_embed=conf['scalegmn_args']['graph_constructor']['edge_pos_embed'],
-                      direction=conf['scalegmn_args']['direction'],
-                      equiv_on_hidden=equiv_on_hidden,
-                      get_first_layer_mask=get_first_layer_mask,
-                      return_wb = True
-                      )
+    val_set = dataset(
+        effective_conf["data"],  # Use effective_conf
+        split="val",
+        debug=effective_conf["debug"],  # Use effective_conf
+        # node_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['node_pos_embed'], # Use effective_conf
+        # edge_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['edge_pos_embed'], # Use effective_conf
+        direction=effective_conf["scalegmn_args"]["direction"],  # Use effective_conf
+        equiv_on_hidden=equiv_on_hidden,
+        get_first_layer_mask=get_first_layer_mask,
+        return_wb=True,
+    )
 
-    test_set = dataset(conf['data'],
-                        split='test',
-                        debug=conf["debug"],
-                      # node_pos_embed=conf['scalegmn_args']['graph_constructor']['node_pos_embed'],
-                      # edge_pos_embed=conf['scalegmn_args']['graph_constructor']['edge_pos_embed'],
-                      direction=conf['scalegmn_args']['direction'],
-                        equiv_on_hidden=equiv_on_hidden,
-                        get_first_layer_mask=get_first_layer_mask,
-                        return_wb = True
-                        )
+    test_set = dataset(
+        effective_conf["data"],  # Use effective_conf
+        split="test",
+        debug=effective_conf["debug"],  # Use effective_conf
+        # node_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['node_pos_embed'], # Use effective_conf
+        # edge_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['edge_pos_embed'], # Use effective_conf
+        direction=effective_conf["scalegmn_args"]["direction"],  # Use effective_conf
+        equiv_on_hidden=equiv_on_hidden,
+        get_first_layer_mask=get_first_layer_mask,
+        return_wb=True,
+    )
 
-    print(f'Len train set: {len(train_set)}')
-    print(f'Len val set: {len(val_set)}')
-    print(f'Len test set: {len(test_set)}')
+    print(f"Len train set: {len(train_set)}")
+    print(f"Len val set: {len(val_set)}")
+    print(f"Len test set: {len(test_set)}")
 
     train_loader = torch_geometric.loader.DataLoader(
         dataset=train_set,
-        batch_size=conf["batch_size"],
+        batch_size=effective_conf["batch_size"],  # Use effective_conf
         shuffle=True,
-        num_workers=conf["num_workers"],
+        num_workers=effective_conf["num_workers"],  # Use effective_conf
         pin_memory=True,
         sampler=None,
     )
     val_loader = torch_geometric.loader.DataLoader(
         dataset=val_set,
-        batch_size=conf["batch_size"],
+        batch_size=effective_conf["batch_size"],  # Use effective_conf
         shuffle=False,
     )
     test_loader = torch_geometric.loader.DataLoader(
         dataset=test_set,
-        batch_size=conf["batch_size"],
+        batch_size=effective_conf["batch_size"],  # Use effective_conf
         shuffle=True,
-        num_workers=conf["num_workers"],
+        num_workers=effective_conf["num_workers"],  # Use effective_conf
         pin_memory=True,
     )
 
@@ -124,10 +169,12 @@ def main(args=None):
     #   DEFINE MODEL
     # =============================================================================================
     # Get an instance of the autoencoder model
-    net = get_autoencoder(model_args=conf, autoencoder_type=AUTOENCODER_TYPE)
+    net = get_autoencoder(
+        model_args=effective_conf, autoencoder_type=AUTOENCODER_TYPE
+    )  # Use effective_conf
 
     # cnt_p = count_parameters(net=net)
-    # if conf["wandb"]:
+    # if effective_conf["wandb"]: # Use effective_conf
     #     wandb.log({'number of parameters': cnt_p}, step=0)
 
     for p in net.parameters():
@@ -137,47 +184,84 @@ def main(args=None):
     # =============================================================================================
     #   DEFINE LOSS
     # =============================================================================================
-    criterion = select_criterion(conf['train_args']['loss'], {})
+    criterion = select_criterion(
+        effective_conf["train_args"]["loss"], {}
+    )  # Use effective_conf
 
     # =============================================================================================
     #   DEFINE OPTIMIZATION
     # =============================================================================================
-    conf_opt = conf['optimization']
+    conf_opt = effective_conf["optimization"]  # Use effective_conf
     model_params = [p for p in net.parameters() if p.requires_grad]
-    optimizer, scheduler = setup_optimization(model_params, optimizer_name=conf_opt['optimizer_name'], optimizer_args=conf_opt['optimizer_args'], scheduler_args=conf_opt['scheduler_args'])
+    optimizer, scheduler = setup_optimization(
+        model_params,
+        optimizer_name=conf_opt["optimizer_name"],
+        optimizer_args=conf_opt["optimizer_args"],
+        scheduler_args=conf_opt["scheduler_args"],
+    )
     # =============================================================================================
     # TRAINING LOOP
     # =============================================================================================
     best_val_acc = -1
     best_train_acc = -1
-    best_test_results, best_val_results, best_train_results, best_train_results_TRAIN = None, None, None, None
+    (
+        best_test_results,
+        best_val_results,
+        best_train_results,
+        best_train_results_TRAIN,
+    ) = (None, None, None, None)
     last_val_accs = []
-    patience = conf['train_args']['patience']
+    patience = effective_conf["train_args"]["patience"]  # Use effective_conf
     if extra_aug:
         # run experiment like in NFN to have comparable results.
-        train_on_steps(net, train_loader, val_loader, test_loader, optimizer, scheduler, criterion, conf, device)
+        train_on_steps(
+            net,
+            train_loader,
+            val_loader,
+            test_loader,
+            optimizer,
+            scheduler,
+            criterion,
+            effective_conf,
+            device,
+        )  # Pass effective_conf
     else:
-        for epoch in range(conf['train_args']['num_epochs']):
+        for epoch in range(
+            effective_conf["train_args"]["num_epochs"]
+        ):  # Use effective_conf
             net.train()
             curr_loss = 0
             len_dataloader = len(train_loader)
             for i, (batch, wb) in enumerate(tqdm(train_loader)):
                 step = epoch * len_dataloader + i
                 batch = batch.to(device)
+                # Move weights and biases to the target device
+                weights_dev = [w.to(device) for w in wb.weights]
+                biases_dev = [b.to(device) for b in wb.biases]
 
                 optimizer.zero_grad()
                 out = net(batch)
 
-                # Reconstruct original images
-                original_imgs = test_inr(wb.weights, wb.biases, permuted_weights=True)
+                # Reconstruct original images using tensors on the correct device - DO NOT SAVE
+                original_imgs = test_inr(
+                    weights_dev, biases_dev, permuted_weights=True, save=True
+                )
 
-                # Reconstruct autoencoder images
+                # Reconstruct autoencoder images - SAVE THIS ONE
                 if AUTOENCODER_TYPE == "inr":
-                    # reconstructed_weights, recontructed_biases = create_batch_wb(out)
-                    reconstructed_imgs = test_inr(*create_batch_wb(out))
+                    w_recon, b_recon = create_batch_wb(
+                        out
+                    )  # Use default out_features=1
+                    reconstructed_imgs = test_inr(
+                        w_recon, b_recon, save=True, img_name="autoencoder_recon"
+                    )  # Save with specific name
                 elif AUTOENCODER_TYPE == "pixels":
-                    reconstructed_imgs = out.view(len(batch), *(tuple(conf["data"]["image_size"])))
-                    save_image([reconstructed_imgs[0].squeeze(-1)], "reconstructed_inr.png")                    
+                    reconstructed_imgs = out.view(
+                        len(batch), *(tuple(effective_conf["data"]["image_size"]))
+                    )  # Use effective_conf
+                    save_image(
+                        [reconstructed_imgs[0].squeeze(-1)], "reconstructed_inr.png"
+                    )
                 else:
                     raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
 
@@ -187,26 +271,34 @@ def main(args=None):
                 curr_loss += loss.item()
                 loss.backward()
                 log = {}
-                if conf['optimization']['clip_grad']:
-                    log['grad_norm'] = torch.nn.utils.clip_grad_norm_(net.parameters(), conf['optimization']['clip_grad_max_norm'])
+                if effective_conf["optimization"]["clip_grad"]:  # Use effective_conf
+                    log["grad_norm"] = torch.nn.utils.clip_grad_norm_(
+                        net.parameters(),
+                        effective_conf["optimization"]["clip_grad_max_norm"],
+                    )  # Use effective_conf
 
                 optimizer.step()
 
-                if conf["wandb"]:
-                    log[f"train/{conf['train_args']['loss']}"] = loss.item()
+                if run:  # Check if wandb run exists
+                    log[f"train/{effective_conf['train_args']['loss']}"] = (
+                        loss.item()
+                    )  # Use effective_conf
                     log["epoch"] = epoch
 
-                if scheduler[1] is not None and scheduler[1] != 'ReduceLROnPlateau':
-                    log["lr"] = scheduler[0].get_last_lr()[0]
+                if scheduler[1] is not None and scheduler[1] != "ReduceLROnPlateau":
+                    if run:
+                        log["lr"] = scheduler[0].get_last_lr()[
+                            0
+                        ]  # Check if wandb run exists
                     scheduler[0].step()
 
-                if conf["wandb"]:
+                if run:  # Check if wandb run exists
                     wandb.log(log, step=step)
 
             #############################################
             # VALIDATION
             #############################################
-            if conf["validate"]:
+            if effective_conf["validate"]:  # Use effective_conf
                 print(f"\nValidation after epoch {epoch}:")
                 val_loss_dict = evaluate(net, val_loader, device=device)
                 test_loss_dict = evaluate(net, test_loader, device=device)
@@ -215,7 +307,15 @@ def main(args=None):
                 test_loss = test_loss_dict["avg_loss"]
                 test_acc = test_loss_dict["avg_acc"]
 
-                train_loss_dict = evaluate(net, train_loader, train_set, num_samples=len(val_set), batch_size=conf["batch_size"], num_workers=conf["num_workers"], device=device)
+                train_loss_dict = evaluate(
+                    net,
+                    train_loader,
+                    train_set,
+                    num_samples=len(val_set),
+                    batch_size=effective_conf["batch_size"],
+                    num_workers=effective_conf["num_workers"],
+                    device=device,
+                )  # Use effective_conf
 
                 best_val_criteria = val_acc >= best_val_acc
 
@@ -226,11 +326,22 @@ def main(args=None):
                     best_train_results = train_loss_dict
 
                 # Save the model
-                if conf["save_model"]["save_model"]:
-                    if best_val_criteria and conf["save_model"]["save_best_only"]:
-                        save_path = conf["save_model"]["save_dir"] + "/" + conf["save_model"]["save_name"]
-                        if not os.path.exists(conf["save_model"]["save_dir"]):
-                            os.makedirs(conf["save_model"]["save_dir"], exist_ok=True)
+                if effective_conf["save_model"]["save_model"]:  # Use effective_conf
+                    if (
+                        best_val_criteria
+                        and effective_conf["save_model"]["save_best_only"]
+                    ):  # Use effective_conf
+                        save_path = (
+                            effective_conf["save_model"]["save_dir"]
+                            + "/"
+                            + effective_conf["save_model"]["save_name"]
+                        )  # Use effective_conf
+                        if not os.path.exists(
+                            effective_conf["save_model"]["save_dir"]
+                        ):  # Use effective_conf
+                            os.makedirs(
+                                effective_conf["save_model"]["save_dir"], exist_ok=True
+                            )  # Use effective_conf
                         torch.save(net.state_dict(), save_path)
 
                 best_train_criteria = train_loss_dict["avg_acc"] >= best_train_acc
@@ -238,40 +349,44 @@ def main(args=None):
                     best_train_acc = train_loss_dict["avg_acc"]
                     best_train_results_TRAIN = train_loss_dict
 
-                if conf["wandb"]:
+                if run:  # Check if wandb run exists
                     log = {
                         "train/avg_loss": train_loss_dict["avg_loss"],
                         "train/acc": train_loss_dict["avg_acc"],
-                        "train/conf_mat": wandb.plot.confusion_matrix(
-                            probs=None,
-                            y_true=train_loss_dict["gt"],
-                            preds=train_loss_dict["predicted"],
-                            class_names=range(10),
-                        ),
+                        # "train/conf_mat": wandb.plot.confusion_matrix(
+                        #     probs=None,
+                        #     y_true=train_loss_dict["gt"],
+                        #     preds=train_loss_dict["predicted"],
+                        #     class_names=range(10),
+                        # ), # Commented out as confusion matrix depends on task type
                         "train/best_loss": best_train_results["avg_loss"],
                         "train/best_acc": best_train_results["avg_acc"],
-                        "train/best_loss_TRAIN_based": best_train_results_TRAIN["avg_loss"],
-                        "train/best_acc_TRAIN_based": best_train_results_TRAIN["avg_acc"],
+                        "train/best_loss_TRAIN_based": best_train_results_TRAIN[
+                            "avg_loss"
+                        ],
+                        "train/best_acc_TRAIN_based": best_train_results_TRAIN[
+                            "avg_acc"
+                        ],
                         "val/loss": val_loss,
-                        "val/acc": val_acc,
+                        "val/acc": val_acc,  # This is the metric needed for the sweep
                         "val/best_loss": best_val_results["avg_loss"],
                         "val/best_acc": best_val_results["avg_acc"],
-                        "val/conf_mat": wandb.plot.confusion_matrix(
-                            probs=None,
-                            y_true=val_loss_dict["gt"],
-                            preds=val_loss_dict["predicted"],
-                            class_names=range(10),
-                        ),
+                        # "val/conf_mat": wandb.plot.confusion_matrix(
+                        #     probs=None,
+                        #     y_true=val_loss_dict["gt"],
+                        #     preds=val_loss_dict["predicted"],
+                        #     class_names=range(10),
+                        # ), # Commented out as confusion matrix depends on task type
                         "test/loss": test_loss,
                         "test/acc": test_acc,
                         "test/best_loss": best_test_results["avg_loss"],
                         "test/best_acc": best_test_results["avg_acc"],
-                        "test/conf_mat": wandb.plot.confusion_matrix(
-                            probs=None,
-                            y_true=test_loss_dict["gt"],
-                            preds=test_loss_dict["predicted"],
-                            class_names=range(10),
-                        ),
+                        # "test/conf_mat": wandb.plot.confusion_matrix(
+                        #     probs=None,
+                        #     y_true=test_loss_dict["gt"],
+                        #     preds=test_loss_dict["predicted"],
+                        #     class_names=range(10),
+                        # ), # Commented out as confusion matrix depends on task type
                         "epoch": epoch,
                     }
 
@@ -284,12 +399,30 @@ def main(args=None):
                 if len(last_val_accs) > patience:
                     last_val_accs.pop(0)
                 # Check if the accuracies are decreasing
-                if len(last_val_accs) == patience and all(x > y for x, y in zip(last_val_accs, last_val_accs[1:])):
-                    print(f"Validation accuracy has been dropping for {patience} consecutive epochs:\n{last_val_accs}\nExiting.")
-                    return 1
+                if len(last_val_accs) == patience and all(
+                    x > y for x, y in zip(last_val_accs, last_val_accs[1:])
+                ):
+                    print(
+                        f"Validation accuracy has been dropping for {patience} consecutive epochs:\n{last_val_accs}\nExiting."
+                    )
+                    if run:
+                        wandb.finish()  # Finish W&B run
+                    return 1  # Indicate early stopping
+
+    if run:
+        wandb.finish()  # Finish W&B run at the end
+
 
 @torch.no_grad()
-def evaluate(model, loader, eval_dataset=None, num_samples=0, batch_size=0, num_workers=8, device=None):
+def evaluate(
+    model,
+    loader,
+    eval_dataset=None,
+    num_samples=0,
+    batch_size=0,
+    num_workers=8,
+    device=None,
+):
     if eval_dataset is not None:
         # only when also evaluating on train split. Since it is a lot bigger, we only evaluate on a smaller subset.
         indices = random.sample(range(len(eval_dataset)), num_samples)
@@ -325,11 +458,21 @@ def evaluate(model, loader, eval_dataset=None, num_samples=0, batch_size=0, num_
     return dict(avg_loss=avg_loss, avg_acc=avg_acc, predicted=predicted, gt=gt)
 
 
-def train_on_steps(net, train_loader, val_loader, test_loader, optimizer, scheduler, criterion, train_conf, device):
+def train_on_steps(
+    net,
+    train_loader,
+    val_loader,
+    test_loader,
+    optimizer,
+    scheduler,
+    criterion,
+    run_config,
+    device,
+):  # Renamed conf to run_config
     """
     Follow the same training procedure as in 'Zhou, Allan, et al. "Permutation equivariant neural functionals." NIPS (2024).'
     """
-    import wandb
+    # import wandb # Already imported globally
 
     def cycle(loader):
         while True:
@@ -340,11 +483,17 @@ def train_on_steps(net, train_loader, val_loader, test_loader, optimizer, schedu
     best_test_results, best_val_results = None, None
 
     train_iter = cycle(train_loader)
-    outer_pbar = trange(0, train_conf['train_args']['max_steps'], position=0)
+    outer_pbar = trange(
+        0, run_config["train_args"]["max_steps"], position=0
+    )  # Use run_config
 
     for step in outer_pbar:
 
-        if step > 0 and step % 3000 == 0 or step == train_conf['train_args']['max_steps'] - 1:
+        if (
+            step > 0
+            and step % 3000 == 0
+            or step == run_config["train_args"]["max_steps"] - 1
+        ):  # Use run_config
             val_loss_dict = evaluate(net, val_loader, device=device)
             test_loss_dict = evaluate(net, test_loader, device=device)
             val_loss = val_loss_dict["avg_loss"]
@@ -356,47 +505,91 @@ def train_on_steps(net, train_loader, val_loader, test_loader, optimizer, schedu
                 best_test_results = test_loss_dict
                 best_val_results = val_loss_dict
 
-            if train_conf["wandb"]:
-                wandb.log({
-                    "val/loss": val_loss,
-                    "val/acc": val_acc,
-                    "val/best_loss": best_val_results["avg_loss"],
-                    "val/best_acc": best_val_results["avg_acc"],
-                    "test/loss": test_loss,
-                    "test/acc": test_acc,
-                    "test/best_loss": best_test_results["avg_loss"],
-                    "test/best_acc": best_test_results["avg_acc"],
-                    "step": step,
-                    "epoch": step // len(train_loader),
-                })
+            if (
+                run_config.get("wandb", False) and wandb.run is not None
+            ):  # Use run_config and check wandb.run
+                wandb.log(
+                    {
+                        "val/loss": val_loss,
+                        "val/acc": val_acc,  # This is the metric needed for the sweep
+                        "val/best_loss": best_val_results["avg_loss"],
+                        "val/best_acc": best_val_results["avg_acc"],
+                        "test/loss": test_loss,
+                        "test/acc": test_acc,
+                        "test/best_loss": best_test_results["avg_loss"],
+                        "test/best_acc": best_test_results["avg_acc"],
+                        "step": step,
+                        "epoch": step // len(train_loader),
+                    }
+                )
 
         net.train()
-        batch = next(train_iter)
-        batch = batch.to(device)
+        # The batch now contains (graph_batch, (weights, biases)) tuple
+        batch, wb = next(train_iter)  # Unpack the tuple
+        batch = batch.to(device)  # Move graph batch to device
+        # Move weights and biases to the target device - feels weird idk
+        weights_dev = [w.to(device) for w in wb.weights]
+        biases_dev = [b.to(device) for b in wb.biases]
+
         optimizer.zero_grad()
-        inputs = (batch)
-        out = net(inputs)
-        loss = criterion(out, batch.label)
+        # inputs = (batch) # Model expects the graph batch
+        out = net(batch)
+
+        # Reconstruct original images using tensors on the correct device - DO NOT SAVE
+        original_imgs = test_inr(
+            weights_dev, biases_dev, permuted_weights=True, save=False
+        )
+
+        # Reconstruct autoencoder images - SAVE THIS ONE
+        if AUTOENCODER_TYPE == "inr":
+            w_recon, b_recon = create_batch_wb(out)  # Use default out_features=1
+            reconstructed_imgs = test_inr(
+                w_recon, b_recon, save=True, img_name="autoencoder_recon"
+            )  # Save with specific name
+        elif AUTOENCODER_TYPE == "pixels":
+            reconstructed_imgs = out.view(
+                len(batch), *(tuple(run_config["data"]["image_size"]))
+            )  # Use run_config
+        else:
+            raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
+
+        loss = criterion(reconstructed_imgs, original_imgs)  # Use original_imgs
         loss.backward()
 
         log = {}
-        if train_conf['optimization']['clip_grad']:
-            log['grad_norm'] = torch.nn.utils.clip_grad_norm_(net.parameters(), train_conf['optimization']['clip_grad_max_norm'])
+        if run_config["optimization"]["clip_grad"]:  # Use run_config
+            log["grad_norm"] = torch.nn.utils.clip_grad_norm_(
+                net.parameters(), run_config["optimization"]["clip_grad_max_norm"]
+            )  # Use run_config
 
         optimizer.step()
 
-        if train_conf["wandb"]:
-            log[f"train/{train_conf['train_args']['loss']}"] = loss.item()
+        if (
+            run_config.get("wandb", False) and wandb.run is not None
+        ):  # Use run_config and check wandb.run
+            log[f"train/{run_config['train_args']['loss']}"] = (
+                loss.item()
+            )  # Use run_config
             log["step"] = step
 
-        if scheduler[1] is not None and scheduler[1] != 'ReduceLROnPlateau':
-            log["lr"] = scheduler[0].get_last_lr()[0]
+        if scheduler[1] is not None and scheduler[1] != "ReduceLROnPlateau":
+            if run_config.get("wandb", False) and wandb.run is not None:
+                log["lr"] = scheduler[0].get_last_lr()[
+                    0
+                ]  # Use run_config and check wandb.run
             scheduler[0].step()
 
-        if train_conf["wandb"]:
-            wandb.log(log, step=step+1)
+        if (
+            run_config.get("wandb", False) and wandb.run is not None
+        ):  # Use run_config and check wandb.run
+            wandb.log(log, step=step + 1)
 
-if __name__ == '__main__':
+    # It's generally better practice to let the main function handle finishing the run
+    # if run_config.get("wandb", False) and wandb.run is not None:
+    #     wandb.finish()
+
+
+if __name__ == "__main__":
     arg_parser = setup_arg_parser()
     args = arg_parser.parse_args()
 
@@ -406,6 +599,7 @@ if __name__ == '__main__':
     if not args.conf:
         args.conf = "configs/mnist_cls/scalegmn_autoencoder.yml"
 
-    conf = yaml.safe_load(open(args.conf))
+    # No need to load config here, main function handles it
+    # conf = yaml.safe_load(open(args.conf))
 
     main(args=args)

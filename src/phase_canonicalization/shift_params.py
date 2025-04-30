@@ -1,7 +1,7 @@
 import torch
 import sys
 import math
-from test_inr import test_inr
+from .test_inr import test_inr
 from copy import deepcopy
 
 
@@ -38,7 +38,7 @@ def first_step(w, b):
 
 def second_step(b):
     for l in range(len(b)):
-        threshold = 2*math.pi
+        threshold = 2 * math.pi
         mask = b[l] > threshold  # all biases seem to be less than that
         b[l][mask] = b[l][mask] % threshold
     return b
@@ -47,9 +47,9 @@ def second_step(b):
 def third_step(b, q):
     for l in range(len(b)):
         mask1 = b[l] > math.pi
-        mask2 = b[l] <= 2*math.pi
+        mask2 = b[l] <= 2 * math.pi
         mask = mask1 * mask2
-        b[l][mask] -= - math.pi
+        b[l][mask] -= -math.pi
         q[l][mask] *= -1
     return b, q
 
@@ -71,7 +71,7 @@ def shift_params(batch, rec_inr=False):
     b3, q3 = third_step(b2, q1)
     bf, qf = final_step(b3, q3)
     final_w = [(qf[l].unsqueeze(-1) * w1[l]).unsqueeze(0) for l in range(len(w1))]
-    final_b = [(qf[l] * bf[l]).reshape(1,-1) for l in range(len(bf))]
+    final_b = [(qf[l] * bf[l]).reshape(1, -1) for l in range(len(bf))]
 
     # test INR
     if rec_inr:

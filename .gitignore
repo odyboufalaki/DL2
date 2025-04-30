@@ -2,3 +2,4 @@
 *.job
 /data/
 __pycache__/
+/wandb/
