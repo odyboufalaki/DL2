@@ -26,7 +26,7 @@ def setup_arg_parser():
         "--validate",
         type=str2bool,
         help="Whether to validate on val split after every epoch.",
-        default=False,
+        default=True,
     )
     parser.add_argument(
         "--gpu-ids", nargs="+", type=int, default=0, help="List of ids of GPUs to use."
