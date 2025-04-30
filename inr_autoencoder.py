@@ -478,8 +478,8 @@ def evaluate(
             raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
 
         loss = criterion(reconstructed_imgs, original_imgs)
-        total_loss += loss.item()
-        total += len(batch)
+        total_loss += loss.item() * len(batch)  # Scale loss up to total sum
+        total += len(batch)                     # Total number of samples
 
     model.train()
     avg_loss = total_loss / total
