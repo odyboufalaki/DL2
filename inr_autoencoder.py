@@ -247,7 +247,10 @@ def main(args=None):
 
                 # Reconstruct original images using tensors on the correct device - DO NOT SAVE
                 original_imgs = test_inr(
-                    weights_dev, biases_dev, permuted_weights=True, save=True
+                    weights_dev, biases_dev, permuted_weights=True
+                )
+                _ = test_inr(
+                    weights_dev, biases_dev, permuted_weights=True, save=True, img_name="original_"
                 )
 
                 # Reconstruct autoencoder images - SAVE THIS ONE
@@ -255,19 +258,24 @@ def main(args=None):
                     w_recon, b_recon = create_batch_wb(
                         out
                     )  # Use default out_features=1
-                    reconstructed_imgs = test_inr(
-                        w_recon, b_recon, save=True, img_name="autoencoder_recon"
+                    _ = test_inr(
+                        w_recon, b_recon, save=True, img_name="autoencoder_"
                     )  # Save with specific name
+                    reconstructed_imgs = test_inr(
+                        w_recon, b_recon
+                    )  # reconstruct without saving
                 elif AUTOENCODER_TYPE == "pixels":
                     reconstructed_imgs = out.view(
                         len(batch), *(tuple(effective_conf["data"]["image_size"]))
                     )  # Use effective_conf
                     save_image(
-                        [reconstructed_imgs[0].squeeze(-1)], "reconstructed_inr.png"
+                        [reconstructed_imgs[0].squeeze(-1).detach().cpu()], "autoencoder_.png"
                     )
                 else:
                     raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
-
+                #print(
+                #    f"Original image shape: {original_imgs.shape}, Reconstructed image shape: {reconstructed_imgs.shape}"
+                #)
                 loss = criterion(reconstructed_imgs, original_imgs)
                 print(f"loss: {loss.item()}")
 
@@ -456,7 +464,10 @@ def evaluate(
 
         # Reconstruct original images using tensors on the correct device - DO NOT SAVE
         original_imgs = test_inr(
-            weights_dev, biases_dev, permuted_weights=True, save=True
+            weights_dev, biases_dev, permuted_weights=True
+        )
+        _ = test_inr(
+            weights_dev, biases_dev, permuted_weights=True, save=True, img_name="original_"
         )
 
         # Reconstruct autoencoder images - SAVE THIS ONE
@@ -464,15 +475,18 @@ def evaluate(
             w_recon, b_recon = create_batch_wb(
                 out
             )  # Use default out_features=1
-            reconstructed_imgs = test_inr(
-                w_recon, b_recon, save=True, img_name="autoencoder_recon"
+            _ = test_inr(
+                w_recon, b_recon, save=True, img_name="autoencoder_"
             )  # Save with specific name
+            reconstructed_imgs = test_inr(
+                w_recon, b_recon
+            )  # reconstruct without saving
         elif AUTOENCODER_TYPE == "pixels":
             reconstructed_imgs = out.view(
                 len(batch), *(tuple(image_size))
             )  # Use effective_conf
             save_image(
-                [reconstructed_imgs[0].squeeze(-1)], "reconstructed_inr.png"
+                [reconstructed_imgs[0].squeeze(-1).detach().cpu()], "autoencoder_.png"
             )
         else:
             raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")

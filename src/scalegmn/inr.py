@@ -222,5 +222,5 @@ def reconstruct_inr(sd, inr_func, save=False, img_name="", last_batch=False, ste
                 #saved_image = img[0].detach().cpu()
                 save_image(img[0].detach().cpu(), img_name + "reconstructed_inr.png")
 
-        r = torch.cat(img)
-        return r
+    r = torch.cat(img)
+    return r
