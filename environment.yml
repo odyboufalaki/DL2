@@ -20,6 +20,7 @@ dependencies:
   - tqdm=4.66.1
   - wandb=0.15.12
   - yaml=0.2.5
+  - umap-learn=0.1.1
   - pip:
       - einops==0.7.0
       - nfn==0.1.2

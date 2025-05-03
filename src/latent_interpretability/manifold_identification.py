@@ -17,12 +17,17 @@ from src.data import dataset
 def get_args():
     p = argparse.ArgumentParser()
     p.add_argument(
-        "--conf", type=str, required=True, help="YAML config used during training"
+        "--conf",
+        type=str,
+        # required=True,
+        default="configs/mnist_cls/scalegmn_autoencoder.yml",
+        help="YAML config used during training"
     )
     p.add_argument(
         "--ckpt",
         type=str,
-        required=True,
+        # required=True,
+        default="models/mnist_cls/scalegmn_autoencoder/scalegmn_autoencoder_mnist_cls.pt",
         help="Path to model checkpoint (.pt or .ckpt)",
     )
     p.add_argument(
