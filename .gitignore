@@ -1,4 +1,6 @@
 *.out
 *.job
+*.png
+*.pt
 /data/
 __pycache__/
