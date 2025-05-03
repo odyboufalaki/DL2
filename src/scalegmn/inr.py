@@ -209,14 +209,18 @@ def make_functional(mod, disable_autograd_tracking=False):
     return fmodel, params_values
 
 
-def reconstruct_inr(sd, inr_func, save=False, img_name='', last_batch=False, step=None):
+def reconstruct_inr(sd, inr_func, save=False, img_name="", last_batch=False, step=None):
     batch_size = len(sd)
     input = make_coordinates((28, 28), 1).to(sd[0][0].device)
     img = []
     for i in range(batch_size):
-        img.append(inr_func(sd[i], input).view(*(28, 28), -1).permute(2, 0, 1).squeeze(-1))
-    if save:
-        if last_batch:
-            save_image([img[0].squeeze(-1)], img_name + "reconstructed_inr.png")
+        permuted_img = inr_func(sd[i], input).view(*(28, 28), -1).permute(2, 0, 1)
+        img.append(permuted_img)
+
+        if save:
+            if last_batch:
+                #saved_image = img[0].detach().cpu()
+                save_image(img[0].detach().cpu(), img_name + "reconstructed_inr.png")
+
     r = torch.cat(img)
     return r

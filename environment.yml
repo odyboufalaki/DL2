@@ -11,7 +11,7 @@ dependencies:
   - pip=23.3
   - python=3.11.5
   - pytorch=2.1.1
-  - pytorch-cuda=12.1
+  # - pytorch-cuda=12.1
   - pytorch_geometric=2.4.0
   - pyyaml=6.0.1
   - scikit-learn=1.2.2
