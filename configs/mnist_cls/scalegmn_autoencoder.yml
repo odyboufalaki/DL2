@@ -98,7 +98,7 @@ scalegmn_args:
 decoder_args:
   data_layer_layout: [2, 32, 32, 1]  # explicitly define the layer layout
   d_input: *d_hid  # initial dimension of input nn bias
-  d_hidden: [256]  # hidden dimension
+  d_hidden: []  # hidden dimension
   activation: silu  # activation function
 
 optimization:
