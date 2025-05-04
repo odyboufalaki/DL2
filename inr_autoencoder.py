@@ -302,7 +302,7 @@ def main(args=None):
             #############################################
             # VALIDATION
             #############################################
-            effective_conf["validate"] = False
+            #effective_conf["validate"] = False
             if effective_conf["validate"]:  # Use effective_conf
                 print(f"\nValidation after epoch {epoch}:")
                 val_loss_dict = evaluate(
@@ -314,6 +314,7 @@ def main(args=None):
                     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],  
                     effective_conf=effective_conf,  
                 )
+                """
                 test_loss_dict = evaluate(
                     net,
                     test_loader,
@@ -323,11 +324,12 @@ def main(args=None):
                     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],    
                     effective_conf=effective_conf,  
                 )
+                """
                 val_loss = val_loss_dict["avg_loss"]
                 #val_acc = val_loss_dict["avg_acc"]
-                test_loss = test_loss_dict["avg_loss"]
+                #test_loss = test_loss_dict["avg_loss"]
                 #test_acc = test_loss_dict["avg_acc"]
-
+                """
                 train_loss_dict = evaluate(
                     net,
                     train_loader,
@@ -341,13 +343,14 @@ def main(args=None):
                     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],
                     effective_conf=effective_conf,  
                 )  # Use effective_conf
+                """
 
                 best_val_criteria = val_loss <= best_val_loss
                 if best_val_criteria:
                     best_val_loss = val_loss
-                    best_test_results = test_loss_dict
+                    #best_test_results = test_loss_dict
                     best_val_results = val_loss_dict
-                    best_train_results = train_loss_dict
+                    #best_train_results = train_loss_dict
 
                 # Save the model
                 if effective_conf["save_model"]["save_model"]:  # Use effective_conf
@@ -368,14 +371,14 @@ def main(args=None):
                             )  # Use effective_conf
                         torch.save(net.state_dict(), save_path)
 
-                best_train_criteria = train_loss_dict["avg_loss"] <= best_train_loss
-                if best_train_criteria:
-                    best_train_loss= train_loss_dict["avg_loss"]
-                    best_train_results_TRAIN = train_loss_dict
+               # best_train_criteria = train_loss_dict["avg_loss"] <= best_train_loss
+               # if best_train_criteria:
+               #     best_train_loss= train_loss_dict["avg_loss"]
+               #     best_train_results_TRAIN = train_loss_dict
 
                 if run:  # Check if wandb run exists
                     log = {
-                        "train/avg_loss": train_loss_dict["avg_loss"],
+                        #"train/avg_loss": train_loss_dict["avg_loss"],
                         #"train/acc": train_loss_dict["avg_acc"],
                         # "train/conf_mat": wandb.plot.confusion_matrix(
                         #     probs=None,
@@ -383,11 +386,11 @@ def main(args=None):
                         #     preds=train_loss_dict["predicted"],
                         #     class_names=range(10),
                         # ), # Commented out as confusion matrix depends on task type
-                        "train/best_loss": best_train_results["avg_loss"],
+                        #"train/best_loss": best_train_results["avg_loss"],
                         #"train/best_acc": best_train_results["avg_acc"],
-                        "train/best_loss_TRAIN_based": best_train_results_TRAIN[
-                            "avg_loss"
-                        ],
+                        #"train/best_loss_TRAIN_based": best_train_results_TRAIN[
+                        #    "avg_loss"
+                        #],
                         #"train/best_acc_TRAIN_based": best_train_results_TRAIN[
                         #    "avg_acc"
                         #],
@@ -401,9 +404,9 @@ def main(args=None):
                         #     preds=val_loss_dict["predicted"],
                         #     class_names=range(10),
                         # ), # Commented out as confusion matrix depends on task type
-                        "test/loss": test_loss,
+                        #"test/loss": test_loss,
                         #"test/acc": test_acc,
-                        "test/best_loss": best_test_results["avg_loss"],
+                        #"test/best_loss": best_test_results["avg_loss"],
                         #"test/best_acc": best_test_results["avg_acc"],
                         # "test/conf_mat": wandb.plot.confusion_matrix(
                         #     probs=None,

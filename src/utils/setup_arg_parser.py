@@ -59,6 +59,7 @@ def setup_arg_parser():
     parser.add_argument("--optimization.scheduler_args.patience", type=float)
     parser.add_argument("--optimization.scheduler_args.min_lr", type=float)
 
+    parser.add_argument("--train_args.reconstruction_type", type=str)
     parser.add_argument("--train_args.num_epochs", type=int)
     parser.add_argument("--train_args.val_acc_threshold", type=float)
     parser.add_argument("--train_args.patience", type=int)
