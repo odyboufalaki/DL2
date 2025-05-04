@@ -23,7 +23,8 @@ class LabeledINRDataset(BaseDataset):
             direction='forward',
             return_path=False,
             data_format="graph",
-            switch_to_canon=True
+            switch_to_canon=True,
+            return_wb=False
     ):
         super().__init__(
             dataset,
@@ -39,7 +40,8 @@ class LabeledINRDataset(BaseDataset):
             direction,
             return_path,
             data_format,
-            switch_to_canon)
+            switch_to_canon,
+            return_wb)
 
         if debug:
             self.dataset = {k: v[:16] for k,v in self.dataset.items()}
