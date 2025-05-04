@@ -2,6 +2,7 @@
 *.job
 *.png
 *.pt
+.env
 /data/
 __pycache__/
 /wandb/

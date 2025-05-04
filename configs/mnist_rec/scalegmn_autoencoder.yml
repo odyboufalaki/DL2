@@ -2,7 +2,7 @@ batch_size: 128
 data:
   dataset: labeled_mnist_inr
   dataset_path: ./data/mnist-inrs/
-  split_path: ./data/mnist-inrs/mnist_splits_hyperparam_tuning_small.json #
+  split_path: ./data/mnist-inrs/mnist_splits.json #
   image_size: [28,28]
   node_pos_embed: &node_pos_embed True
   edge_pos_embed: &edge_pos_embed True
@@ -121,15 +121,16 @@ optimization:
     min_lr: None
 
 wandb_args:
-  project: mnist_cls
-  entity: null
-  group: null
+  project: mnist_rec
+  entity: scale-gmns
+  group: scale-gmns
   name: null
   tags: null
 
 save_model:
   save_model: True
   save_dir: ./models/mnist_cls/scalegmn_autoencoder
-  save_name: scalegmn_autoencoder_mnist_cls.pt
-  save_best_only: True
-  save_last_only: False
+  save_name: scalegmn_autoencoder_mnist_rec.pt
+  save_best: True
+  save_every: 5 # save checkpoint every n epochs
+  log_images_wandb: 1 # log images to wandb every n epochs, 0 means never log images

@@ -3,11 +3,13 @@ import yaml
 import torch.nn.functional as F
 import os
 import random
+import numpy as np
 from src.data import dataset
 from tqdm import tqdm, trange
 from torch.utils import data
 import torch_geometric
 import torch.distributed as dist
+from torchvision.utils import make_grid
 from src.phase_canonicalization.test_inr import test_inr
 from src.scalegmn.inr import INR, reconstruct_inr, make_functional
 from src.utils.setup_arg_parser import setup_arg_parser
@@ -140,9 +142,25 @@ def main(args=None):
         return_wb=True,
     )
 
+    if effective_conf["save_model"]["log_images_wandb"] != 0:
+        plot_epoch_set = dataset(
+            effective_conf["data"],  # Use effective_conf
+            split="plot_epoch",
+            debug=effective_conf["debug"],  # Use effective_conf
+            # node_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['node_pos_embed'], # Use effective_conf
+            # edge_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['edge_pos_embed'], # Use effective_conf
+            direction=effective_conf["scalegmn_args"]["direction"],  # Use effective_conf
+            equiv_on_hidden=equiv_on_hidden,
+            get_first_layer_mask=get_first_layer_mask,
+            return_wb=True,
+        )
+
     print(f"Len train set: {len(train_set)}")
     print(f"Len val set: {len(val_set)}")
     print(f"Len test set: {len(test_set)}")
+
+    if effective_conf["save_model"]["log_images_wandb"] != 0:
+        print(f"Len plot_epoch set: {len(plot_epoch_set)}")
 
     train_loader = torch_geometric.loader.DataLoader(
         dataset=train_set,
@@ -164,6 +182,12 @@ def main(args=None):
         num_workers=effective_conf["num_workers"],  # Use effective_conf
         pin_memory=True,
     )
+    if effective_conf["save_model"]["log_images_wandb"] != 0:
+        plot_epoch_loader = torch_geometric.loader.DataLoader(
+            dataset=plot_epoch_set,
+            batch_size=10,  # Number of images in the logging dataset
+            shuffle=False,
+        )
 
     # =============================================================================================
     #   DEFINE MODEL
@@ -245,13 +269,13 @@ def main(args=None):
                 optimizer.zero_grad()
                 out = net(batch)
 
-                # Reconstruct original images using tensors on the correct device - DO NOT SAVE
+                # Reconstruct original images using tensors on the correct device - DO NOT SAVE IMAGE
                 original_imgs = test_inr(
                     weights_dev, biases_dev, permuted_weights=True,
                     pixel_expansion=effective_conf['train_args']['pixel_expansion']
                 )
 
-                # Reconstruct autoencoder images - SAVE THIS ONE
+                # Reconstruct autoencoder images - DO NOT SAVE IMAGE
                 if effective_conf["train_args"]["reconstruction_type"] == "inr":
                     w_recon, b_recon = create_batch_wb(
                         out
@@ -266,9 +290,7 @@ def main(args=None):
                     )  # Use effective_conf
                 else:
                     raise ValueError(f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}")
-                #print(
-                #    f"Original image shape: {original_imgs.shape}, Reconstructed image shape: {reconstructed_imgs.shape}"
-                #)
+
                 loss = criterion(reconstructed_imgs, original_imgs, weight=original_imgs if effective_conf["train_args"]["weigthed_loss"] else None)
                 print(f"loss: {loss.item()}")
 
@@ -302,48 +324,44 @@ def main(args=None):
             #############################################
             # VALIDATION
             #############################################
-            #effective_conf["validate"] = False
             if effective_conf["validate"]:  # Use effective_conf
                 print(f"\nValidation after epoch {epoch}:")
                 val_loss_dict = evaluate(
-                    net,
-                    val_loader,
-                    effective_conf["data"]["image_size"],
-                    criterion,
+                    model=net,
+                    loader=val_loader,
+                    image_size=effective_conf["data"]["image_size"],
+                    criterion=criterion,
                     device=device,
                     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],  
-                    effective_conf=effective_conf,  
+                    effective_conf=effective_conf,
                 )
-                """
-                test_loss_dict = evaluate(
-                    net,
-                    test_loader,
-                    effective_conf["data"]["image_size"],
-                    criterion,
-                    device=device,
-                    pixel_expansion=effective_conf["train_args"]["pixel_expansion"],    
-                    effective_conf=effective_conf,  
-                )
-                """
+                # test_loss_dict = evaluate(
+                #     model=net,
+                #     loader=test_loader,
+                #     image_size=effective_conf["data"]["image_size"],
+                #     criterion=criterion,
+                #     device=device,
+                #     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],    
+                #     effective_conf=effective_conf,  
+                # )
                 val_loss = val_loss_dict["avg_loss"]
                 #val_acc = val_loss_dict["avg_acc"]
                 #test_loss = test_loss_dict["avg_loss"]
                 #test_acc = test_loss_dict["avg_acc"]
-                """
-                train_loss_dict = evaluate(
-                    net,
-                    train_loader,
-                    effective_conf["data"]["image_size"],
-                    criterion,
-                    train_set,
-                    num_samples=len(val_set),
-                    batch_size=effective_conf["batch_size"],
-                    num_workers=effective_conf["num_workers"],
-                    device=device,
-                    pixel_expansion=effective_conf["train_args"]["pixel_expansion"],
-                    effective_conf=effective_conf,  
-                )  # Use effective_conf
-                """
+
+                # train_loss_dict = evaluate(
+                #     model=net,
+                #     loader=train_loader,
+                #     image_size=effective_conf["data"]["image_size"],
+                #     criterion=criterion,
+                #     eval_dataset=train_set,
+                #     num_samples=len(val_set),
+                #     batch_size=effective_conf["batch_size"],
+                #     num_workers=effective_conf["num_workers"],
+                #     device=device,
+                #     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],
+                #     effective_conf=effective_conf,  
+                # )  # Use effective_conf
 
                 best_val_criteria = val_loss <= best_val_loss
                 if best_val_criteria:
@@ -356,7 +374,7 @@ def main(args=None):
                 if effective_conf["save_model"]["save_model"]:  # Use effective_conf
                     if (
                         best_val_criteria
-                        and effective_conf["save_model"]["save_best_only"]
+                        and effective_conf["save_model"]["save_best"]
                     ):  # Use effective_conf
                         save_path = (
                             effective_conf["save_model"]["save_dir"]
@@ -436,8 +454,149 @@ def main(args=None):
                         wandb.finish()  # Finish W&B run
                     return 1  # Indicate early stopping
 
+
+            # Save model every n epochs
+            if effective_conf["save_model"]["save_model"] \
+                and epoch % effective_conf["save_model"]["save_every"] == 0:
+                    save_path = (
+                        effective_conf["save_model"]["save_dir"]
+                        + "/checkpoints/"
+                        + "epoch=" + str(epoch) + "_"
+                        + effective_conf["save_model"]["save_name"]
+                    )  # Use effective_conf
+                    if not os.path.exists(
+                        effective_conf["save_model"]["save_dir"] + "/checkpoints/"
+                    ):  # Use effective_conf
+                        os.makedirs(
+                            effective_conf["save_model"]["save_dir"] + "/checkpoints/", exist_ok=True
+                        )  # Use effective_conf
+                    torch.save(net.state_dict(), save_path)
+
+
+            # Log images to W&B
+            if run and effective_conf["save_model"]["log_images_wandb"] != 0 \
+                and epoch % effective_conf["save_model"]["log_images_wandb"] == 0:
+                log_epoch_images(
+                    epoch=epoch,
+                    model=net,
+                    plot_epoch_loader=plot_epoch_loader,
+                    image_size=effective_conf["data"]["image_size"],
+                    device=device,
+                    pixel_expansion=effective_conf["train_args"]["pixel_expansion"],
+                    effective_conf=effective_conf,
+                )
+
+
     if run:
         wandb.finish()  # Finish W&B run at the end
+
+
+@torch.no_grad()
+def log_epoch_images(
+    epoch,
+    model,
+    plot_epoch_loader, 
+    image_size,
+    device=None,
+    pixel_expansion=1,
+    effective_conf=None,
+):
+    def _create_and_log_table(original_imgs, reconstructed_imgs, epoch):
+        "Log a wandb.Table of images, one per label"
+        # Create a wandb Table to log images, labels and predictions to
+        table = wandb.Table(
+            columns=["original_image", "reconstructed_image"]
+        )
+        original_imgs = original_imgs.to("cpu")
+        reconstructed_imgs = reconstructed_imgs.to("cpu")
+        for img_idx in range(original_imgs.shape[0]):
+            original_img = original_imgs[img_idx]
+            predicted_img = reconstructed_imgs[img_idx]
+
+            original_img_wandb = wandb.Image((original_img.numpy()).astype('uint8').squeeze(), mode="L")
+            reconstructed_img_wandb = wandb.Image((predicted_img.numpy()).astype('uint8').squeeze(), mode="L")
+
+            # Add the images to the wandb table
+            table.add_data(original_img_wandb, reconstructed_img_wandb)
+        wandb.log({f"images_table_{epoch}": table}, step=epoch+1)
+
+
+    def _create_and_log_image_grid(original_imgs, reconstructed_imgs, epoch):
+        "Log a wandb.Image of images, one per label"
+        def _make_mnist_grid(orig: torch.Tensor, recon: torch.Tensor) -> np.ndarray:
+            """
+            Given:
+            orig: torch.Tensor of shape (10, 28, 28)
+            recon: torch.Tensor of shape (10, 28, 28)
+            Returns:
+            grid: np.ndarray of shape (280, 56), where each row is [orig_i | recon_i].
+            """
+            # sanity checks
+            if orig.shape != (10, 28, 28) or recon.shape != (10, 28, 28):
+                raise ValueError(f"Expected both tensors of shape (10,28,28), got {orig.shape} and {recon.shape}")
+
+            # move to CPU / numpy
+            orig_np  = orig.cpu().numpy()
+            recon_np = recon.cpu().numpy()
+
+            # build each of the 10 rows by horizontally stacking orig_i and recon_i
+            rows = []
+            for i in range(10):
+                row = np.vstack([orig_np[i], recon_np[i]])  # shape (28, 56)
+                rows.append(row)
+
+            # vertically stack the 10 rows into one image
+            grid = np.hstack(rows)  # shape (10*28, 2*28) = (280, 56)
+            return grid
+
+        # Log the image grid to wandb
+        wandb.log({f"image_grid": [wandb.Image(_make_mnist_grid(original_imgs, reconstructed_imgs))]}, step=epoch + 1)
+
+
+    model.eval()
+    _, (batch, wb) = next(enumerate(tqdm(plot_epoch_loader)))
+
+    batch = batch.to(device)
+    out = model(batch)
+    #step = epoch * len_dataloader + i
+    # Move weights and biases to the target device
+    weights_dev = [w.to(device) for w in wb.weights]
+    biases_dev = [b.to(device) for b in wb.biases]
+
+    # Reconstruct original images using tensors on the correct device
+    original_imgs = test_inr(
+        weights_dev, biases_dev, permuted_weights=True,
+        pixel_expansion=pixel_expansion
+    )
+
+    # Reconstruct autoencoder images
+    if effective_conf["train_args"]["reconstruction_type"] == "inr":
+        w_recon, b_recon = create_batch_wb(
+            out
+        )
+        reconstructed_imgs = test_inr(
+            w_recon, b_recon,
+            pixel_expansion=pixel_expansion
+        )
+    elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
+        reconstructed_imgs = out.view(
+            len(batch), *(tuple(image_size))
+        )
+        # print(f"reconstructed_imgs mean per sample: {out.view(out.size(0), -1).mean(dim=1).std()}")
+    else:
+        raise ValueError(f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}")
+
+    model.train()
+
+    # Mimic the torch save function transformations
+    original_imgs = original_imgs.mul(255).add_(0.5).clamp_(0, 255)
+    reconstructed_imgs = reconstructed_imgs.mul(255).add_(0.5).clamp_(0, 255)
+
+    # Log images as a table
+    # _create_and_log_table(original_imgs, reconstructed_imgs, epoch)
+
+    # Log images as a contantenated image
+    _create_and_log_image_grid(original_imgs, reconstructed_imgs, epoch)
 
 
 @torch.no_grad()
@@ -453,7 +612,6 @@ def evaluate(
     device=None,
     pixel_expansion=1,
     effective_conf=None,
-   
 ):
     if eval_dataset is not None:
         # only when also evaluating on train split. Since it is a lot bigger, we only evaluate on a smaller subset.
@@ -479,19 +637,21 @@ def evaluate(
         weights_dev = [w.to(device) for w in wb.weights]
         biases_dev = [b.to(device) for b in wb.biases]
 
-        # Reconstruct original images using tensors on the correct device - DO NOT SAVE
+        # Reconstruct original images using tensors on the correct device
         original_imgs = test_inr(
-            weights_dev, biases_dev, permuted_weights=True, save=True, img_name="original_",
+            weights_dev, biases_dev, permuted_weights=True,
+            # save=True, img_name="original_",
             pixel_expansion=pixel_expansion
         )
 
-        # Reconstruct autoencoder images - SAVE THIS ONE
+        # Reconstruct autoencoder images
         if effective_conf["train_args"]["reconstruction_type"] == "inr":
             w_recon, b_recon = create_batch_wb(
                 out
             )  # Use default out_features=1
             reconstructed_imgs = test_inr(
-                w_recon, b_recon, save=True, img_name="inr_",
+                w_recon, b_recon,
+                # save=True, img_name="inr_",
                 pixel_expansion=pixel_expansion
             )
         elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
@@ -654,7 +814,7 @@ if __name__ == "__main__":
         args.gpu_ids = [args.gpu_ids]
 
     if not args.conf:
-        args.conf = "configs/mnist_rec/scalegmn_autoencoder_sweep.yml"
+        args.conf = "configs/mnist_rec/scalegmn_autoencoder.yml"
 
     # No need to load config here, main function handles it
     # conf = yaml.safe_load(open(args.conf))
