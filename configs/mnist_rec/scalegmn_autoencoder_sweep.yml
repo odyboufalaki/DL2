@@ -1,8 +1,8 @@
-batch_size: 32
+batch_size: 128
 data:
   dataset: labeled_mnist_inr
   dataset_path: ./data/mnist-inrs/
-  split_path: ./data/mnist-inrs/mnist_splits_hyperparam_tuning_small.json #
+  split_path: ./data/mnist-inrs/mnist_splits_hyperparam_tuning.json #
   image_size: [28,28]
   node_pos_embed: &node_pos_embed True
   edge_pos_embed: &edge_pos_embed True
