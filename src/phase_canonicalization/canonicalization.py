@@ -4,7 +4,7 @@ from collections import OrderedDict
 import yaml
 import torch
 import sys
-from .shift_params import shift_params, iterate_l
+from shift_params import shift_params, iterate_l
 from tqdm import tqdm
 import json
 from src.data import dataset

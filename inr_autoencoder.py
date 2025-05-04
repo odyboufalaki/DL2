@@ -49,6 +49,9 @@ def main(args=None):
         effective_conf = conf
         run = None  # No wandb run object
 
+    decoder_hidden_dim_list = [effective_conf["scalegmn_args"]["d_hid"]*elem for elem in effective_conf["decoder_args"]["d_hidden"]] 
+    effective_conf["decoder_args"]["d_hidden"] = decoder_hidden_dim_list
+    
     # Use 'effective_conf' consistently from here onwards
     torch.set_float32_matmul_precision("high")
 
@@ -254,16 +257,13 @@ def main(args=None):
                         out
                     )  # Use default out_features=1
                     reconstructed_imgs = test_inr(
-                        w_recon, b_recon, save=True, img_name="autoencoder_",
-                        pixel_expansion=effective_conf['optimization']['pixel_expansion']
+                        w_recon, b_recon, 
+                        pixel_expansion=effective_conf['train_args']['pixel_expansion']
                     )
                 elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
                     reconstructed_imgs = out.view(
                         len(batch), *(tuple(effective_conf["data"]["image_size"]))
                     )  # Use effective_conf
-                    save_image(
-                        [reconstructed_imgs[0].squeeze(-1).detach().cpu()], "autoencoder_.png"
-                    )
                 else:
                     raise ValueError(f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}")
                 #print(
@@ -491,7 +491,7 @@ def evaluate(
                 out
             )  # Use default out_features=1
             reconstructed_imgs = test_inr(
-                w_recon, b_recon, save=True, img_name="autoencoder_",
+                w_recon, b_recon, save=True, img_name="inr_",
                 pixel_expansion=pixel_expansion
             )
         elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
@@ -499,7 +499,7 @@ def evaluate(
                 len(batch), *(tuple(image_size))
             )  # Use effective_conf
             save_image(
-                [reconstructed_imgs[0].squeeze(-1).detach().cpu()], "autoencoder_.png"
+                [reconstructed_imgs[0].squeeze(-1).detach().cpu()], "pixels_auto_reconstructed.png"
             )
         else:
             raise ValueError(f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}")
@@ -654,7 +654,7 @@ if __name__ == "__main__":
         args.gpu_ids = [args.gpu_ids]
 
     if not args.conf:
-        args.conf = "configs/mnist_rec/scalegmn_autoencoder.yml"
+        args.conf = "configs/mnist_rec/scalegmn_autoencoder_sweep.yml"
 
     # No need to load config here, main function handles it
     # conf = yaml.safe_load(open(args.conf))

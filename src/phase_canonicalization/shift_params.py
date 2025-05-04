@@ -1,7 +1,7 @@
 import torch
 import sys
 import math
-from .test_inr import test_inr
+from test_inr import test_inr
 from copy import deepcopy
 
 

@@ -2,7 +2,7 @@ batch_size: 128
 data:
   dataset: labeled_mnist_inr
   dataset_path: ./data/mnist-inrs/
-  split_path: ./data/mnist-inrs/mnist_splits.json  #
+  split_path: ./data/mnist-inrs/mnist_splits_hyperparam_tuning_small.json #
   image_size: [28,28]
   node_pos_embed: &node_pos_embed True
   edge_pos_embed: &edge_pos_embed True
@@ -11,7 +11,7 @@ data:
   switch_to_canon: True
 
 train_args:
-  num_epochs: 100
+  num_epochs: 10
   val_acc_threshold: 0.1
   patience: 50
   seed: 0
@@ -113,7 +113,7 @@ optimization:
     weight_decay: 0.01
   scheduler_args:
     scheduler: WarmupLRScheduler
-    warmup_steps: 2000
+    warmup_steps: 430
     scheduler_mode: min
     decay_rate: 0
     decay_steps: 0
