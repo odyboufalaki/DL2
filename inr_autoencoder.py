@@ -30,17 +30,14 @@ import wandb
 
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
-AUTOENCODER_TYPE = "inr"
-
-
 def main(args=None):
 
-    # 1. Read base config file
+    # Read base config file
     conf = yaml.safe_load(open(args.conf))
-    # 2. Overwrite base config with command-line arguments (if any)
+    # Overwrite base config with command-line arguments (if any)
     conf = overwrite_conf(conf, vars(args))
 
-    # 3. Initialize W&B (if enabled)
+    # Initialize W&B (if enabled)
     #    - W&B automatically merges sweep parameters with the provided 'config'.
     #    - 'wandb.config' will hold the final, merged configuration.
     if conf.get("wandb", False):
@@ -170,7 +167,7 @@ def main(args=None):
     # =============================================================================================
     # Get an instance of the autoencoder model
     net = get_autoencoder(
-        model_args=effective_conf, autoencoder_type=AUTOENCODER_TYPE
+        model_args=effective_conf, autoencoder_type=effective_conf["train_args"]["reconstruction_type"]
     )  # Use effective_conf
 
     # cnt_p = count_parameters(net=net)
@@ -227,7 +224,7 @@ def main(args=None):
             criterion,
             effective_conf,
             device,
-        )  # Pass effective_conf
+        )
     else:
         for epoch in range(
             effective_conf["train_args"]["num_epochs"]
@@ -247,24 +244,20 @@ def main(args=None):
 
                 # Reconstruct original images using tensors on the correct device - DO NOT SAVE
                 original_imgs = test_inr(
-                    weights_dev, biases_dev, permuted_weights=True
-                )
-                _ = test_inr(
-                    weights_dev, biases_dev, permuted_weights=True, save=True, img_name="original_"
+                    weights_dev, biases_dev, permuted_weights=True,
+                    pixel_expansion=effective_conf['train_args']['pixel_expansion']
                 )
 
                 # Reconstruct autoencoder images - SAVE THIS ONE
-                if AUTOENCODER_TYPE == "inr":
+                if effective_conf["train_args"]["reconstruction_type"] == "inr":
                     w_recon, b_recon = create_batch_wb(
                         out
                     )  # Use default out_features=1
-                    _ = test_inr(
-                        w_recon, b_recon, save=True, img_name="autoencoder_"
-                    )  # Save with specific name
                     reconstructed_imgs = test_inr(
-                        w_recon, b_recon
-                    )  # reconstruct without saving
-                elif AUTOENCODER_TYPE == "pixels":
+                        w_recon, b_recon, save=True, img_name="autoencoder_",
+                        pixel_expansion=effective_conf['optimization']['pixel_expansion']
+                    )
+                elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
                     reconstructed_imgs = out.view(
                         len(batch), *(tuple(effective_conf["data"]["image_size"]))
                     )  # Use effective_conf
@@ -272,11 +265,11 @@ def main(args=None):
                         [reconstructed_imgs[0].squeeze(-1).detach().cpu()], "autoencoder_.png"
                     )
                 else:
-                    raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
+                    raise ValueError(f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}")
                 #print(
                 #    f"Original image shape: {original_imgs.shape}, Reconstructed image shape: {reconstructed_imgs.shape}"
                 #)
-                loss = criterion(reconstructed_imgs, original_imgs)
+                loss = criterion(reconstructed_imgs, original_imgs, weight=original_imgs if effective_conf["train_args"]["weigthed_loss"] else None)
                 print(f"loss: {loss.item()}")
 
                 curr_loss += loss.item()
@@ -309,10 +302,27 @@ def main(args=None):
             #############################################
             # VALIDATION
             #############################################
+            effective_conf["validate"] = False
             if effective_conf["validate"]:  # Use effective_conf
                 print(f"\nValidation after epoch {epoch}:")
-                val_loss_dict = evaluate(net, val_loader, effective_conf["data"]["image_size"], criterion,  device=device)
-                test_loss_dict = evaluate(net, test_loader, effective_conf["data"]["image_size"], criterion, device=device)
+                val_loss_dict = evaluate(
+                    net,
+                    val_loader,
+                    effective_conf["data"]["image_size"],
+                    criterion,
+                    device=device,
+                    pixel_expansion=effective_conf["train_args"]["pixel_expansion"],  
+                    effective_conf=effective_conf,  
+                )
+                test_loss_dict = evaluate(
+                    net,
+                    test_loader,
+                    effective_conf["data"]["image_size"],
+                    criterion,
+                    device=device,
+                    pixel_expansion=effective_conf["train_args"]["pixel_expansion"],    
+                    effective_conf=effective_conf,  
+                )
                 val_loss = val_loss_dict["avg_loss"]
                 #val_acc = val_loss_dict["avg_acc"]
                 test_loss = test_loss_dict["avg_loss"]
@@ -328,6 +338,8 @@ def main(args=None):
                     batch_size=effective_conf["batch_size"],
                     num_workers=effective_conf["num_workers"],
                     device=device,
+                    pixel_expansion=effective_conf["train_args"]["pixel_expansion"],
+                    effective_conf=effective_conf,  
                 )  # Use effective_conf
 
                 best_val_criteria = val_loss <= best_val_loss
@@ -436,6 +448,8 @@ def evaluate(
     batch_size=0,
     num_workers=8,
     device=None,
+    pixel_expansion=1,
+    effective_conf=None,
    
 ):
     if eval_dataset is not None:
@@ -464,24 +478,20 @@ def evaluate(
 
         # Reconstruct original images using tensors on the correct device - DO NOT SAVE
         original_imgs = test_inr(
-            weights_dev, biases_dev, permuted_weights=True
-        )
-        _ = test_inr(
-            weights_dev, biases_dev, permuted_weights=True, save=True, img_name="original_"
+            weights_dev, biases_dev, permuted_weights=True, save=True, img_name="original_",
+            pixel_expansion=pixel_expansion
         )
 
         # Reconstruct autoencoder images - SAVE THIS ONE
-        if AUTOENCODER_TYPE == "inr":
+        if effective_conf["train_args"]["reconstruction_type"] == "inr":
             w_recon, b_recon = create_batch_wb(
                 out
             )  # Use default out_features=1
-            _ = test_inr(
-                w_recon, b_recon, save=True, img_name="autoencoder_"
-            )  # Save with specific name
             reconstructed_imgs = test_inr(
-                w_recon, b_recon
-            )  # reconstruct without saving
-        elif AUTOENCODER_TYPE == "pixels":
+                w_recon, b_recon, save=True, img_name="autoencoder_",
+                pixel_expansion=pixel_expansion
+            )
+        elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
             reconstructed_imgs = out.view(
                 len(batch), *(tuple(image_size))
             )  # Use effective_conf
@@ -489,7 +499,7 @@ def evaluate(
                 [reconstructed_imgs[0].squeeze(-1).detach().cpu()], "autoencoder_.png"
             )
         else:
-            raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
+            raise ValueError(f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}")
 
         loss = criterion(reconstructed_imgs, original_imgs)
         total_loss += loss.item() * len(batch)  # Scale loss up to total sum
@@ -585,17 +595,17 @@ def train_on_steps(
         )
 
         # Reconstruct autoencoder images - SAVE THIS ONE
-        if AUTOENCODER_TYPE == "inr":
+        if run_config["train_args"]["reconstruction_type"] == "inr":
             w_recon, b_recon = create_batch_wb(out)  # Use default out_features=1
             reconstructed_imgs = test_inr(
                 w_recon, b_recon, save=True, img_name="autoencoder_recon"
             )  # Save with specific name
-        elif AUTOENCODER_TYPE == "pixels":
+        elif run_config["train_args"]["reconstruction_type"] == "pixels":
             reconstructed_imgs = out.view(
                 len(batch), *(tuple(run_config["data"]["image_size"]))
             )  # Use run_config
         else:
-            raise ValueError(f"Unknown autoencoder type: {AUTOENCODER_TYPE}")
+            raise ValueError(f"Unknown autoencoder type: {run_config['train_args']['reconstruction_type']}")
 
         loss = criterion(reconstructed_imgs, original_imgs)  # Use original_imgs
         loss.backward()
@@ -641,7 +651,7 @@ if __name__ == "__main__":
         args.gpu_ids = [args.gpu_ids]
 
     if not args.conf:
-        args.conf = "configs/mnist_cls/scalegmn_autoencoder.yml"
+        args.conf = "configs/mnist_rec/scalegmn_autoencoder.yml"
 
     # No need to load config here, main function handles it
     # conf = yaml.safe_load(open(args.conf))

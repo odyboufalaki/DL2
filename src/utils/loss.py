@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
+from torch.nn.functional import mse_loss
+
 from nfn.common import WeightSpaceFeatures
 import math
 from src.data.base_datasets import Batch
-from ..scalegmn.inr import INR
+from ..scalegmn.inr import INR, make_coordinates
 
 
 def select_criterion(criterion: str, criterion_args: dict) -> nn.Module:
@@ -11,7 +13,7 @@ def select_criterion(criterion: str, criterion_args: dict) -> nn.Module:
         'CrossEntropyLoss': nn.CrossEntropyLoss(**criterion_args),
         'MSE': nn.MSELoss(),
         'BCE': nn.BCELoss(),
-        'ReconstructionLoss': nn.MSELoss(),  # TODO fix
+        'ReconstructionLoss': weighted_mse_loss  # Allows for weighted loss
     }
     if criterion not in _map.keys():
         raise NotImplementedError
@@ -55,3 +57,13 @@ def L2_distance(x, x_hat, batch_size=1):
         raise NotImplemented
 
     return loss
+
+
+def weighted_mse_loss(input, target, weight=None):
+    """
+    Compute a weighted mean squared error loss.
+    """
+    if weight is not None:
+        return torch.mean(weight * torch.square(input - target))
+    else:
+        return mse_loss(input, target)

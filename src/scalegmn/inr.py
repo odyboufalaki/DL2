@@ -209,12 +209,12 @@ def make_functional(mod, disable_autograd_tracking=False):
     return fmodel, params_values
 
 
-def reconstruct_inr(sd, inr_func, save=False, img_name="", last_batch=False, step=None):
+def reconstruct_inr(sd, inr_func, save=False, img_name="", last_batch=False, step=None, pixel_expansion=1):
     batch_size = len(sd)
-    input = make_coordinates((28, 28), 1).to(sd[0][0].device)
+    input = make_coordinates((pixel_expansion * 28, pixel_expansion * 28), 1).to(sd[0][0].device)
     img = []
     for i in range(batch_size):
-        permuted_img = inr_func(sd[i], input).view(*(28, 28), -1).permute(2, 0, 1)
+        permuted_img = inr_func(sd[i], input).view(*(pixel_expansion * 28, pixel_expansion * 28), -1).permute(2, 0, 1)
         img.append(permuted_img)
 
         if save:

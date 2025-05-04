@@ -5,12 +5,12 @@ sys.path.append("../scalegmn")
 from src.scalegmn.inr import INR, reconstruct_inr
 
 
-def test_inr(w, b, permuted_weights=False, save=True, img_name=""):
+def test_inr(w, b, permuted_weights=False, save=True, img_name="", pixel_expansion=1):
     wb_tuple = _wb_to_tuple(w, b, permuted_weights=permuted_weights)
     inr = INR()
     inr_func, _ = make_functional(inr)
     return reconstruct_inr(
-        wb_tuple, inr_func, save=save, img_name=img_name, last_batch=True
+        wb_tuple, inr_func, save=save, img_name=img_name, last_batch=True, pixel_expansion=pixel_expansion
     )
 
 

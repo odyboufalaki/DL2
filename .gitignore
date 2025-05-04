@@ -1,5 +1,7 @@
 *.out
 *.job
+*.png
+*.pt
 /data/
 __pycache__/
 /wandb/
