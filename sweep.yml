@@ -1,3 +1,5 @@
+project: test
+entity: scale-gmns # Your wandb entity
 program: inr_autoencoder.py # Your main training script
 method: grid # Or bayes, random
 metric:

@@ -11,13 +11,13 @@ data:
   switch_to_canon: True
 
 train_args:
-  num_epochs: 10
+  num_epochs: 100
   val_acc_threshold: 0.1
   patience: 50
   seed: 0
   loss: ReconstructionLoss
   weigthed_loss: False  # Weighted loss assigns a weight proportional to the pixel value
-  reconstruction_type: pixels # pixels or inr
+  reconstruction_type: inr # pixels or inr
   pixel_expansion: 1 # Pixel granularity for the reconstruction loss and generated images.
 
 scalegmn_args:
@@ -27,7 +27,7 @@ scalegmn_args:
   num_layers: 4 # number of gnn layers to apply
   direction: forward
   equivariant: False
-  symmetry: sign  # symmetry
+  symmetry: permutation  # symmetry
   jit: False # prefer compile - compile gnn to optimize performance
   compile: False # compile gnn to optimize performance
 
@@ -101,7 +101,7 @@ scalegmn_args:
 decoder_args:
   data_layer_layout: *layer_layout  # explicitly define the layer layout
   d_input: *d_hid  # initial dimension of input nn bias
-  d_hidden: []  # hidden dimension
+  d_hidden: [2, 4, 8]  # hidden dimension
   activation: silu  # activation function
 
 optimization:
@@ -109,11 +109,11 @@ optimization:
   clip_grad_max_norm: 10.0
   optimizer_name: AdamW
   optimizer_args:
-    lr: 5e-1
+    lr: 0.0001
     weight_decay: 0.01
   scheduler_args:
     scheduler: WarmupLRScheduler
-    warmup_steps: 430
+    warmup_steps: 1000
     scheduler_mode: min
     decay_rate: 0
     decay_steps: 0
@@ -121,15 +121,16 @@ optimization:
     min_lr: None
 
 wandb_args:
-  project: mnist_cls
-  entity: null
-  group: null
+  project: mnist_rec_baseline_correct
+  entity: scale-gmns
+  group: scale-gmns
   name: null
   tags: null
 
 save_model:
   save_model: True
-  save_dir: ./models/mnist_cls/scalegmn_autoencoder
-  save_name: scalegmn_autoencoder_mnist_cls.pt
-  save_best_only: True
-  save_last_only: False
+  save_dir: models/mnist_rec_scale/scalegmn_autoencoder_baseline_correct
+  save_name: scalegmn_autoencoder_baseline_mnist_rec_correct.pt
+  save_best: True
+  save_every: 5 # save checkpoint every n epochs
+  log_images_wandb: 1 # log images to wandb every n epochs, 0 means never log images
