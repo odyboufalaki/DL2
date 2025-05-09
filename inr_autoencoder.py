@@ -820,8 +820,7 @@ if __name__ == "__main__":
     if isinstance(args.gpu_ids, int):
         args.gpu_ids = [args.gpu_ids]
 
-    if not args.conf:
-        args.conf = "configs/mnist_rec/scalegmn_autoencoder.yml"
+    print(f"Loading config from {args.conf}")
 
     # No need to load config here, main function handles it
     # conf = yaml.safe_load(open(args.conf))
