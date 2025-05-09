@@ -18,7 +18,7 @@ parameters:
   train_args.reconstruction_type:
     values: [pixels, inr] # Try both pixel and INR reconstruction types
   scalegmn_args.d_hid:    
-    values: [128] # Try different hidden dimensions for the GMN
+    values: [256] # Try different hidden dimensions for the GMN
 
   # scalegmn_args.gnn_args.dropout:
   #   values: [0.0, 0.1, 0.2]
