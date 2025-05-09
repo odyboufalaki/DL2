@@ -478,7 +478,18 @@ class EquivariantLayer(nn.Module):
     """
     Scale Equivariant Layer.
     """
-    def __init__(self, d_in, d_out, mlp_args, d_extra=0, symmetry='sign', equiv_on_hidden=False, num_mlps=2, sign_symmetrization=False):
+
+    def _init_(
+        self,
+        d_in,
+        d_out,
+        mlp_args,
+        d_extra=0,
+        symmetry="sign",
+        equiv_on_hidden=False,
+        num_mlps=2,
+        sign_symmetrization=False,
+    ):
         """
         Args:
             d_in: input dimension
@@ -490,26 +501,38 @@ class EquivariantLayer(nn.Module):
             num_mlps: use different MLPs for the input and the output nodes
             sign_symmetrization: apply canonicalization or symmetrization to the input data
         """
-        super().__init__()
+        super()._init_()
         self.d_in = d_in
         self.d_out = d_out
         self.d_extra = d_extra
         self.W = nn.Linear(d_in, d_out, bias=False)
 
-        inv_net = InvariantNet if symmetry != 'permutation' else MLPNet
-
-        self.g = inv_net(d_in,
-                         d_out,
-                         mlp_args,
-                         symmetry,
-                         d_extra,
-                         equiv_on_hidden=equiv_on_hidden,
-                         num_mlps=num_mlps,
-                         sign_symmetrization=sign_symmetrization)
-
-    def forward(self, x: torch.Tensor, extra_features=None, mask_hidden=None, mask_first_layer=None, sign_mask=None):
+        if symmetry != "permutation":
+            self.g = InvariantNet(
+                d_in,
+                d_out,
+                mlp_args,
+                symmetry,
+                d_extra,
+                equiv_on_hidden=equiv_on_hidden,
+                num_mlps=num_mlps,
+                sign_symmetrization=sign_symmetrization,
+            )
+        else:
+            self.g = MLPNet(d_in=d_in, d_out=d_out, mlp_args=mlp_args)
+       
+    def forward(
+        self,
+        x: torch.Tensor,
+        extra_features=None,
+        mask_hidden=None,
+        mask_first_layer=None,
+        sign_mask=None,
+    ):
         linearly_transformed = self.W(x)
-        r = linearly_transformed * self.g(x, extra_features, mask_hidden, mask_first_layer, sign_mask=sign_mask)
+        r = linearly_transformed * self.g(
+            x, extra_features, mask_hidden, mask_first_layer, sign_mask=sign_mask
+        )
         return r
 
 
