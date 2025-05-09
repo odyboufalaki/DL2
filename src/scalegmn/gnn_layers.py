@@ -240,6 +240,7 @@ class ScaleGMN_GNN_layer_aggr(base_GNN_layer):
         return msg_j
 
 
+
 class GNN_layer_aggr(base_GNN_layer):
     """
     Plain GNN layer for the bidirectional variant. MSG function is MLP.

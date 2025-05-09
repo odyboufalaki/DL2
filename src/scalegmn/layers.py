@@ -479,7 +479,7 @@ class EquivariantLayer(nn.Module):
     Scale Equivariant Layer.
     """
 
-    def _init_(
+    def __init__(
         self,
         d_in,
         d_out,
@@ -501,7 +501,7 @@ class EquivariantLayer(nn.Module):
             num_mlps: use different MLPs for the input and the output nodes
             sign_symmetrization: apply canonicalization or symmetrization to the input data
         """
-        super()._init_()
+        super().__init__()
         self.d_in = d_in
         self.d_out = d_out
         self.d_extra = d_extra
