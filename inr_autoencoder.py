@@ -197,6 +197,13 @@ def main(args=None):
         model_args=effective_conf, autoencoder_type=effective_conf["train_args"]["reconstruction_type"]
     )  # Use effective_conf
 
+    # Print the number of parameters in the decoder and the entire network
+    decoder_params = sum(p.numel() for p in net.decoder.parameters() if p.requires_grad)
+    net_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
+
+    print(f"Number of parameters in the decoder: {decoder_params}")
+    print(f"Number of parameters in the entire network: {net_params}")
+
     # cnt_p = count_parameters(net=net)
     # if effective_conf["wandb"]: # Use effective_conf
     #     wandb.log({'number of parameters': cnt_p}, step=0)
