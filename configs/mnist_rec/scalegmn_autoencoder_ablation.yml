@@ -11,7 +11,7 @@ data:
   switch_to_canon: True
 
 train_args:
-  num_epochs: 100
+  num_epochs: 150
   val_acc_threshold: 0.1
   patience: 50
   seed: 0
@@ -109,7 +109,7 @@ optimization:
   clip_grad_max_norm: 10.0
   optimizer_name: AdamW
   optimizer_args:
-    lr: 0.0001
+    lr: 1e-3
     weight_decay: 0.01
   scheduler_args:
     scheduler: WarmupLRScheduler
@@ -121,7 +121,7 @@ optimization:
     min_lr: None
 
 wandb_args:
-  project: mnist_rec_baseline_correct
+  project: mnist_rec
   entity: scale-gmns
   group: scale-gmns
   name: null
@@ -129,8 +129,8 @@ wandb_args:
 
 save_model:
   save_model: True
-  save_dir: models/mnist_rec_scale/scalegmn_autoencoder_baseline_correct
-  save_name: scalegmn_autoencoder_baseline_mnist_rec_correct.pt
+  save_dir: models/mnist_rec_scale/scalegmn_autoencoder_baseline_ablation
+  save_name: scalegmn_autoencoder_baseline_mnist_rec_ablation.pt
   save_best: True
   save_every: 5 # save checkpoint every n epochs
   log_images_wandb: 1 # log images to wandb every n epochs, 0 means never log images

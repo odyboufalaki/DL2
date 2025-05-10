@@ -194,9 +194,7 @@ class InvariantLayer(nn.Module):
             self.rho = mlp(in_features=in_features, out_features=in_features, **mlp_args)
 
     def forward(self, x: torch.Tensor, extra_features=None):
-        
         ABLATION = True  # TODO: Load this from config
-
         if ABLATION:
             r = self.rho(x)  # TODO: Consider changing this to self.rho(x)
         else:

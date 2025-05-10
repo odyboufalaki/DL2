@@ -193,6 +193,7 @@ def main(args=None):
     #   DEFINE MODEL
     # =============================================================================================
     # Get an instance of the autoencoder model
+    print(effective_conf)
     net = get_autoencoder(
         model_args=effective_conf, autoencoder_type=effective_conf["train_args"]["reconstruction_type"]
     )  # Use effective_conf
@@ -204,9 +205,11 @@ def main(args=None):
     print(f"Number of parameters in the decoder: {decoder_params}")
     print(f"Number of parameters in the entire network: {net_params}")
 
-    # cnt_p = count_parameters(net=net)
-    # if effective_conf["wandb"]: # Use effective_conf
-    #     wandb.log({'number of parameters': cnt_p}, step=0)
+    cnt_p = count_parameters(net=net)
+    if effective_conf.get("wandb", False):  # Use effective_conf and check if wandb is enabled
+        wandb.log({'number of parameters': cnt_p, 'decoder parameters': decoder_params, 'total parameters': net_params}, step=0)
+
+    # exit()
 
     for p in net.parameters():
         p.requires_grad = True
@@ -557,7 +560,7 @@ def log_epoch_images(
             return grid
 
         # Log the image grid to wandb
-        wandb.log({f"image_grid": [wandb.Image(_make_mnist_grid(original_imgs, reconstructed_imgs))]}, step=epoch + 1)
+        wandb.log({f"image_grid": [wandb.Image(_make_mnist_grid(original_imgs, reconstructed_imgs))]})
 
 
     model.eval()
@@ -820,6 +823,7 @@ if __name__ == "__main__":
     if isinstance(args.gpu_ids, int):
         args.gpu_ids = [args.gpu_ids]
 
+    # "configs/mnist_rec/scalegmn_autoencoder_ablation.yml"
     print(f"Loading config from {args.conf}")
 
     # No need to load config here, main function handles it

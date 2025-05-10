@@ -11,7 +11,7 @@ data:
   switch_to_canon: True
 
 train_args:
-  num_epochs: 1
+  num_epochs: 150
   val_acc_threshold: 0.1
   patience: 50
   seed: 0

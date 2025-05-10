@@ -85,7 +85,7 @@ scalegmn_args:
     sign_symmetrization: True
 
   mlp_args:
-    d_k: [ 256, 128, 128 ]  # hidden dimension
+    d_k: [ *d_hid ]  # hidden dimension
     activation: silu
     dropout: 0.
     final_activation: identity
@@ -109,7 +109,7 @@ optimization:
   clip_grad_max_norm: 10.0
   optimizer_name: AdamW
   optimizer_args:
-    lr: 0.0001
+    lr: 1e-3
     weight_decay: 0.01
   scheduler_args:
     scheduler: WarmupLRScheduler
