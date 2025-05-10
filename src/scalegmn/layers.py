@@ -194,20 +194,25 @@ class InvariantLayer(nn.Module):
             self.rho = mlp(in_features=in_features, out_features=in_features, **mlp_args)
 
     def forward(self, x: torch.Tensor, extra_features=None):
+        
+        ABLATION = True  # TODO: Load this from config
 
-        if self.symmetry == 'sign':
-            if self.sign_symmetrization:
-                r = self.rho(x) + self.rho(-x)
-            else:
-                r = torch.abs(x)
-        elif self.symmetry == 'scale':
-            eps = 1e-10
-            norms = torch.norm(x, p=2, dim=-1, keepdim=True)
-            r = x / (norms + eps)
+        if ABLATION:
+            r = self.rho(x)  # TODO: Consider changing this to self.rho(x)
         else:
-            raise NotImplementedError
-        if extra_features is not None:
-            r = torch.cat((r, extra_features), dim=-1)
+            if self.symmetry == 'sign':
+                if self.sign_symmetrization:
+                    r = self.rho(x) + self.rho(-x)
+                else:
+                    r = torch.abs(x)
+            elif self.symmetry == 'scale':
+                eps = 1e-10
+                norms = torch.norm(x, p=2, dim=-1, keepdim=True)
+                r = x / (norms + eps)
+            else:
+                raise NotImplementedError
+            if extra_features is not None:
+                r = torch.cat((r, extra_features), dim=-1)
         return self.phi(r) if self.final_mlp else r
 
 

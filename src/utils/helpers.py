@@ -56,8 +56,8 @@ def update_common_args(config: dict) -> dict:
         config['scalegmn_args']['mlp_args']['dropout'] = config['scalegmn_args']['gnn_args']['dropout']
 
     # dk
-    for layer_idx in range(len(config['scalegmn_args']['mlp_args']['d_k'])):
-        config['scalegmn_args']['mlp_args']['d_k'][layer_idx] = config['scalegmn_args']['d_hid']
+    # for layer_idx in range(len(config['scalegmn_args']['mlp_args']['d_k'])):
+    #     config['scalegmn_args']['mlp_args']['d_k'][layer_idx] = config['scalegmn_args']['d_hid']
 
     return config
 
