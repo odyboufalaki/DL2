@@ -27,7 +27,7 @@ scalegmn_args:
   num_layers: 4 # number of gnn layers to apply
   direction: forward
   equivariant: False
-  symmetry: permutation  # symmetry
+  symmetry: sign  # symmetry
   jit: False # prefer compile - compile gnn to optimize performance
   compile: False # compile gnn to optimize performance
 
@@ -85,7 +85,7 @@ scalegmn_args:
     sign_symmetrization: True
 
   mlp_args:
-    d_k: [ 256, 128, 128 ]  # hidden dimension
+    d_k: [ *d_hid]
     activation: silu
     dropout: 0.
     final_activation: identity
