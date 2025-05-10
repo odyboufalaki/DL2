@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
-
+import numpy as np
+from tqdm import tqdm
 import hydra
 import torch
 import torch.multiprocessing as mp
@@ -20,6 +21,116 @@ from src.neural_graphs.experiments.utils import count_parameters, ddp_setup, set
 
 set_logger()
 
+@torch.no_grad()
+def log_epoch_images(
+    epoch,
+    model,
+    plot_epoch_loader, 
+    image_size,
+    device=None,
+    pixel_expansion=1,
+    effective_conf=None,
+):
+    def _create_and_log_table(original_imgs, reconstructed_imgs, epoch):
+        "Log a wandb.Table of images, one per label"
+        # Create a wandb Table to log images, labels and predictions to
+        table = wandb.Table(
+            columns=["original_image", "reconstructed_image"]
+        )
+        original_imgs = original_imgs.to("cpu")
+        reconstructed_imgs = reconstructed_imgs.to("cpu")
+        for img_idx in range(original_imgs.shape[0]):
+            original_img = original_imgs[img_idx]
+            predicted_img = reconstructed_imgs[img_idx]
+
+            original_img_wandb = wandb.Image((original_img.numpy()).astype('uint8').squeeze(), mode="L")
+            reconstructed_img_wandb = wandb.Image((predicted_img.numpy()).astype('uint8').squeeze(), mode="L")
+
+            # Add the images to the wandb table
+            table.add_data(original_img_wandb, reconstructed_img_wandb)
+        wandb.log({f"images_table_{epoch}": table}, step=epoch+1)
+
+
+    def _create_and_log_image_grid(original_imgs, reconstructed_imgs, epoch):
+        "Log a wandb.Image of images, one per label"
+        def _make_mnist_grid(orig: torch.Tensor, recon: torch.Tensor) -> np.ndarray:
+            """
+            Given:
+            orig: torch.Tensor of shape (10, 28, 28)
+            recon: torch.Tensor of shape (10, 28, 28)
+            Returns:
+            grid: np.ndarray of shape (280, 56), where each row is [orig_i | recon_i].
+            """
+            # sanity checks
+            if orig.shape != (10, 28, 28) or recon.shape != (10, 28, 28):
+                raise ValueError(f"Expected both tensors of shape (10,28,28), got {orig.shape} and {recon.shape}")
+
+            # move to CPU / numpy
+            orig_np  = orig.cpu().numpy()
+            recon_np = recon.cpu().numpy()
+
+            # build each of the 10 rows by horizontally stacking orig_i and recon_i
+            rows = []
+            for i in range(10):
+                row = np.vstack([orig_np[i], recon_np[i]])  # shape (28, 56)
+                rows.append(row)
+
+            # vertically stack the 10 rows into one image
+            grid = np.hstack(rows)  # shape (10*28, 2*28) = (280, 56)
+            return grid
+
+        # Log the image grid to wandb
+        wandb.log({f"image_grid": [wandb.Image(_make_mnist_grid(original_imgs, reconstructed_imgs))]}, step=epoch + 1)
+
+
+    model.eval()
+    _, batch = next(enumerate(tqdm(plot_epoch_loader)))
+
+    batch = batch.to(device)
+    inputs = (batch.weights, batch.biases)
+    out = model(inputs)
+    #step = epoch * len_dataloader + i
+    # Move weights and biases to the target device
+    #weights_dev = [w.to(device) for w in batch.weights]
+    #biases_dev = [b.to(device) for b in batch.biases]
+
+    original_imgs = test_inr(
+                batch.weights, batch.biases, permuted_weights=True, save=False
+     )
+
+    # Reconstruct autoencoder images
+    if effective_conf["train_args"]["reconstruction_type"] == "inr":
+        w_recon, b_recon = create_batch_wb(
+            out
+        )
+        reconstructed_imgs = test_inr(
+            w_recon, b_recon,
+            pixel_expansion=pixel_expansion
+        )
+    elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
+        reconstructed_imgs = out.view(
+            len(batch), *(tuple(image_size))
+        )
+        # print(f"reconstructed_imgs mean per sample: {out.view(out.size(0), -1).mean(dim=1).std()}")
+    else:
+        raise ValueError(f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}")
+
+    model.train()
+
+    print("Original imgs:", original_imgs.shape, original_imgs.min(), original_imgs.max())
+    print("Reconstructed imgs:", reconstructed_imgs.shape, reconstructed_imgs.min(), reconstructed_imgs.max())
+
+
+    # Mimic the torch save function transformations
+    original_imgs = original_imgs.mul(255).add_(0.5).clamp_(0, 255)
+    reconstructed_imgs = reconstructed_imgs.mul(255).add_(0.5).clamp_(0, 255)
+
+    # Log images as a table
+    # _create_and_log_table(original_imgs, reconstructed_imgs, epoch)
+
+    # Log images as a contantenated image
+    _create_and_log_image_grid(original_imgs, reconstructed_imgs, epoch)
+
 
 @torch.no_grad()
 def evaluate(model, loader, device, num_batches=None):
@@ -33,9 +144,9 @@ def evaluate(model, loader, device, num_batches=None):
             break
         batch = batch.to(device)
         inputs = (batch.weights, batch.biases)
-        out = model(inputs)
+        #out = model(inputs)
         #loss += F.cross_entropy(out, batch.label, reduction="sum")
-        #total += len(batch.label)
+        total += len(batch)
         #pred = out.argmax(1)
         #correct += pred.eq(batch.label).sum()
         out = model(inputs)
@@ -46,7 +157,7 @@ def evaluate(model, loader, device, num_batches=None):
         reconstructed_imgs = test_inr(
         w_recon, b_recon, save=True, img_name="autoencoder_recon"
             )  # Save with specific
-        loss = F.mse_loss(original_imgs, reconstructed_imgs) 
+        loss += F.mse_loss(original_imgs, reconstructed_imgs) 
         #predicted.extend(pred.cpu().numpy().tolist())
         #gt.extend(batch.label.cpu().numpy().tolist())
 
@@ -80,6 +191,8 @@ def train(cfg, hydra_cfg):
             config=OmegaConf.to_container(cfg, resolve=True),
         )
 
+
+   
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # load dataset
@@ -149,7 +262,7 @@ def train(cfg, hydra_cfg):
     criterion = nn.MSELoss()
     best_val_loss = float("inf")
     best_test_results, best_val_results = None, None
-    test_acc, test_loss = -1.0, -1.0
+    test_loss = float("inf")
     global_step = 0
     start_epoch = 0
 
@@ -189,6 +302,8 @@ def train(cfg, hydra_cfg):
             batch = batch.to(device)
             inputs = (batch.weights, batch.biases)
             label = batch.label
+       
+            
 
             with torch.autocast(**autocast_kwargs):
                 out = model(inputs)
@@ -196,9 +311,11 @@ def train(cfg, hydra_cfg):
                 batch.weights, batch.biases, permuted_weights=True, save=False
                 )
                 w_recon, b_recon = create_batch_wb(out)  # Use default out_features=1
+
                 reconstructed_imgs = test_inr(
-                w_recon, b_recon, save=True, img_name="autoencoder_recon"
-                 )  # Save with specific
+                w_recon, b_recon)                 
+                 # Save with specific
+               
                 loss = criterion(original_imgs, reconstructed_imgs) / cfg.num_accum
 
             scaler.scale(loss).backward()
@@ -278,8 +395,20 @@ def train(cfg, hydra_cfg):
                     "global_step": global_step,
                 }
 
+        
                 wandb.log(log)
-
+        
+        effective_conf = {"train_args": {"reconstruction_type":"inr"}}
+    
+        # Log images to W&B
+        log_epoch_images(
+            epoch=epoch,
+            model=model,
+            plot_epoch_loader=train_loader,
+            image_size=[28,28],
+            device=device,
+            effective_conf=effective_conf,
+        )
 
 def train_ddp(rank, cfg, hydra_cfg):
     ddp_setup(rank, cfg.distributed.world_size)

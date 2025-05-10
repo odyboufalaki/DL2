@@ -120,6 +120,7 @@ class INRDataset(torch.utils.data.Dataset):
         biases = tuple((w - m) / s for w, m, s in zip(biases, bm, bs))
 
         return weights, biases
+   
 
     @staticmethod
     def rotation_mat(degree=30.0):

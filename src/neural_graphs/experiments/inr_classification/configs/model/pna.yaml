@@ -1,7 +1,7 @@
 _target_: src.neural_graphs.nn.gnn.GNNForClassification
 _recursive_: False
 d_out: 1185
-d_hid: 32
+d_hid: 128
 compile: False
 rev_edge_features: False
 pooling_method: cat

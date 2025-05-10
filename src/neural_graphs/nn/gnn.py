@@ -109,9 +109,9 @@ class GNNForClassification(nn.Module):
 
         self.proj_out = nn.Sequential(
             nn.Linear(num_graph_features, 2*d_hid),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Linear(2*d_hid, 4*d_hid),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Linear(4*d_hid, d_out),
         )
         gnn_kwargs = dict()
@@ -141,7 +141,7 @@ class GNNForClassification(nn.Module):
         edge_features = to_dense_adj(batch.edge_index, batch.batch, out_edge)
 
         graph_features = self.pool(node_features, edge_features)
-
+        print(graph_features.shape)
         return self.proj_out(graph_features)
 
 
