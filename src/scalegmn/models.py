@@ -143,7 +143,7 @@ class ScaleGMN_GNN(nn.Module):
             self.only_last_layer = self.readout_range == 'last_layer'
 
         self.gnn_layer = {
-            'forward': ScaleEq_GNN_layer,  #if self.symmetry != 'permutation' else GNN_layer,
+            'forward': ScaleEq_GNN_layer if self.symmetry != 'permutation' else GNN_layer,
             'bidirectional': ScaleGMN_GNN_layer_aggr if self.symmetry != 'permutation' else GNN_layer_aggr
         }
 
