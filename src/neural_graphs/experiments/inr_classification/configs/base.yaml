@@ -1,5 +1,5 @@
 defaults:
-  - model: rtransformer
+  - model: pna
   - data: mnist
   - _self_
 
