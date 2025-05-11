@@ -48,7 +48,7 @@ def log_epoch_images(
 
             # Add the images to the wandb table
             table.add_data(original_img_wandb, reconstructed_img_wandb)
-        wandb.log({f"images_table_{epoch}": table}, step=epoch+1)
+        wandb.log({f"images_table_{epoch}": table})
 
 
     def _create_and_log_image_grid(original_imgs, reconstructed_imgs, epoch):
@@ -80,7 +80,7 @@ def log_epoch_images(
             return grid
 
         # Log the image grid to wandb
-        wandb.log({f"image_grid": [wandb.Image(_make_mnist_grid(original_imgs, reconstructed_imgs))]}, step=epoch + 1)
+        wandb.log({f"image_grid": [wandb.Image(_make_mnist_grid(original_imgs, reconstructed_imgs))]})
 
 
     model.eval()

@@ -4,6 +4,8 @@
 *.pt
 .env
 /data/
+/model/
 __pycache__/
 /wandb/
 .DS_STORE
+outputs/
