@@ -141,7 +141,6 @@ class GNNForClassification(nn.Module):
         edge_features = to_dense_adj(batch.edge_index, batch.batch, out_edge)
 
         graph_features = self.pool(node_features, edge_features)
-        print(graph_features.shape)
         return self.proj_out(graph_features)
 
 

@@ -3,12 +3,12 @@ defaults:
   - data: mnist
   - _self_
 
-n_epochs: 10
-batch_size: 10
+n_epochs: 300
+batch_size: 128
 
 n_views: 1
 num_workers: 8
-eval_every: 2
+eval_every: 2150
 num_accum: 1
 
 compile: false
@@ -50,9 +50,11 @@ clip_grad_max_norm: 10.0
 seed: 42
 save_path: ./output
 wandb:
-  project: inr-classification
-  entity: null
+  project: mnist_rec_kofinas
+  entity: scale-gmns
+  group: scale-gmns
   name: null
+  tags: null
 
 matmul_precision: high
 cudnn_benchmark: False

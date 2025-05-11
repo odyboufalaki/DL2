@@ -2,8 +2,8 @@
 target: src.neural_graphs.experiments.data.INRDataset
 normalize: False
 dataset_name: mnist
-dataset_dir: /Users/odyboufalis/Desktop/DL2/
-splits_path: /Users/odyboufalis/Desktop/DL2/src/neural_graphs/experiments/inr_classification/dataset/test.json #mnist_splits.json
+dataset_dir: /home/scur2584/DL2/
+splits_path: data/mnist-inrs/mnist_splits.json #mnist_splits.json
 statistics_path: mnist_statistics.pth
 num_classes: 10
 img_shape: [28, 28]
@@ -19,10 +19,11 @@ stats:
   #weights_std: [0.06281130015850067, 0.018268151208758354, 0.11791174858808517]
   #biases_mean: [5.419965418695938e-06, 3.7173406326473923e-06, -0.01239530649036169]
   #biases_std: [0.021334609016776085, 0.011004417203366756, 0.09989194571971893]
-  weights_mean: [0.013375136069953442, -0.00012271679588593543, 0.023679226636886597]
-  weights_std: [0.06385520100593567, 0.01680104434490204, 0.12200209498405457]
-  biases_mean: [-0.0013833368429914117, -0.0006470571388490498, 0.038136206567287445]
-  biases_std: [0.022104093804955482, 0.011308652348816395, 0.11709156632423401]
+  weights_mean: [-3.5504377592587844e-05, -4.8822840881257434e-08, 7.772364187985659e-05]
+  weights_std: [0.06279996037483215, 0.01826673373579979, 0.11789341270923615]
+  biases_mean: [1.1538306353031658e-05, -1.386660102298265e-07, -0.012366106733679771]
+  biases_std: [0.02133277803659439, 0.011006370186805725, 0.09987874329090118]
+
 
 train:
   _target_: ${data.target}
@@ -52,6 +53,17 @@ test:
   dataset_dir: ${data.dataset_dir}
   splits_path: ${data.splits_path}
   split: test
+  normalize: ${data.normalize}
+  augmentation: False
+  permutation: False
+  statistics_path: ${data.statistics_path}
+  # num_classes: ${data.num_classes}
+
+plot_epoch:
+  _target_: ${data.target}
+  dataset_dir: ${data.dataset_dir}
+  splits_path: ${data.splits_path}
+  split: plot_epoch
   normalize: ${data.normalize}
   augmentation: False
   permutation: False

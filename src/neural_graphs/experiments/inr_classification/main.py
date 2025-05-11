@@ -117,9 +117,6 @@ def log_epoch_images(
 
     model.train()
 
-    print("Original imgs:", original_imgs.shape, original_imgs.min(), original_imgs.max())
-    print("Reconstructed imgs:", reconstructed_imgs.shape, reconstructed_imgs.min(), reconstructed_imgs.max())
-
 
     # Mimic the torch save function transformations
     original_imgs = original_imgs.mul(255).add_(0.5).clamp_(0, 255)
@@ -157,7 +154,7 @@ def evaluate(model, loader, device, num_batches=None):
         reconstructed_imgs = test_inr(
         w_recon, b_recon, save=True, img_name="autoencoder_recon"
             )  # Save with specific
-        loss += F.mse_loss(original_imgs, reconstructed_imgs) 
+        loss += F.mse_loss(original_imgs, reconstructed_imgs)*len(batch) 
         #predicted.extend(pred.cpu().numpy().tolist())
         #gt.extend(batch.label.cpu().numpy().tolist())
 
@@ -199,6 +196,7 @@ def train(cfg, hydra_cfg):
     train_set = hydra.utils.instantiate(cfg.data.train)
     val_set = hydra.utils.instantiate(cfg.data.val)
     test_set = hydra.utils.instantiate(cfg.data.test)
+    plot_epoch_set = hydra.utils.instantiate(cfg.data.plot_epoch)
 
     train_loader = torch.utils.data.DataLoader(
         dataset=train_set,
@@ -217,6 +215,13 @@ def train(cfg, hydra_cfg):
     )
     test_loader = torch.utils.data.DataLoader(
         dataset=test_set,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        num_workers=cfg.num_workers,
+        pin_memory=True,
+    )
+    plot_epoch_loader = torch.utils.data.DataLoader(
+        dataset=plot_epoch_set,
         batch_size=cfg.batch_size,
         shuffle=False,
         num_workers=cfg.num_workers,
@@ -355,7 +360,7 @@ def train(cfg, hydra_cfg):
                         "cfg": cfg,
                         "global_step": global_step,
                     },
-                    ckpt_dir / "latest.ckpt",
+                    ckpt_dir / f"{epoch}.ckpt",
                 )
 
                 val_loss_dict = evaluate(model, val_loader, device)
@@ -404,7 +409,7 @@ def train(cfg, hydra_cfg):
         log_epoch_images(
             epoch=epoch,
             model=model,
-            plot_epoch_loader=train_loader,
+            plot_epoch_loader=plot_epoch_loader,
             image_size=[28,28],
             device=device,
             effective_conf=effective_conf,

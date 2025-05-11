@@ -77,7 +77,8 @@ class INRDataset(torch.utils.data.Dataset):
     ):
         self.split = split
         self.splits_path = (
-            (Path(dataset_dir) / Path(splits_path)).expanduser().resolve()
+            #(Path(dataset_dir) / Path(splits_path)).expanduser().resolve()
+            Path(splits_path).expanduser().resolve()
         )
         self.root = self.splits_path.parent
         with self.splits_path.open("r") as f:
