@@ -13,7 +13,6 @@ from src.scalegmn.autoencoder import get_autoencoder
 from src.data import dataset
 
 
-# --------------------------------------------------
 def get_args():
     p = argparse.ArgumentParser()
     p.add_argument(
@@ -21,7 +20,7 @@ def get_args():
         type=str,
         # required=True,
         default="configs/mnist_rec/scalegmn_autoencoder_ablation.yml",
-        help="YAML config used during training"
+        help="YAML config used during training",
     )
     p.add_argument(
         "--ckpt",
@@ -35,79 +34,84 @@ def get_args():
     )
     p.add_argument("--outdir", type=str, default="latent/resources/manifold_ablation")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument(
-        "--pca_dim",
-        type=int,
-        default=None,
-        help="If >0, apply PCA to this dimension before UMAP / t-SNE",
-    )
     return p.parse_args()
 
 
-# --------------------------------------------------
-@torch.no_grad()
-def collect_latents(model, loader, device):
-    """Collects the latent codes from the model encoder for all samples in the dataset.
-    Args:
-        model: The model to use for encoding.
-        loader: The data loader for the dataset.
-        device: The device to use for computation.
-    Returns:
-        zs: The latent codes (tensor of shape [N, latent_dim]).
-        ys: The labels (tensor of shape [N]).
-        wbs: The raw INR parameters (list of tensors).
-    """
-    zs, ys, wbs = [], [], []
-    model.eval()
-    for batch, wb in loader:
-        batch = batch.to(device)
-        z = model.encoder(batch)  # [B, latent_dim]
-        zs.append(z.cpu())
-        ys.append(batch.label.cpu())
-        wbs.append(wb)  # raw INR params, useful for reconstructions
-    return torch.cat(zs), torch.cat(ys), wbs
+class DimensionalityReducer:
+    def __init__(self, method, **kwargs):
+        self.method = method
+        self.kwargs = kwargs
+
+    def full_pipeline(self, model, loader, device, save_path=None):
+        zs, ys, _ = self.collect_latents(model, loader, device)
+        embeddings = self.fit_transform(zs)
+
+        if save_path is not None:
+            self.scatter(
+                embeddings,
+                ys,
+                f"UMAP - {args.split}",
+                os.path.join(save_path),
+            )
+            print("Saved 2-D scatter plots to", save_path)
+
+    def fit_transform(self, z):
+        Z = z.numpy()
+        if self.method == "umap":
+            reducer = umap.UMAP(**self.kwargs)
+        elif self.method == "tsne":
+            reducer = TSNE(**self.kwargs)
+        else:
+            raise ValueError(self.method)
+
+        Y = reducer.fit_transform(Z)
+        return Y
+
+    @torch.no_grad()
+    def collect_latents(model, loader, device):
+        """Collects the latent codes from the model encoder for all samples in the dataset.
+        Args:
+            model: The model to use for encoding.
+            loader: The data loader for the dataset.
+            device: The device to use for computation.
+        Returns:
+            zs: The latent codes (tensor of shape [N, latent_dim]).
+            ys: The labels (tensor of shape [N]).
+            wbs: The raw INR parameters (list of tensors).
+        """
+        zs, ys, wbs = [], [], []
+        model.eval()
+        for batch, wb in loader:
+            batch = batch.to(device)
+            z = model.encoder(batch)  # [B, latent_dim]
+            zs.append(z.cpu())
+            ys.append(batch.label.cpu())
+            wbs.append(wb)  # raw INR params, useful for reconstructions
+        return torch.cat(zs), torch.cat(ys), wbs
+
+    def scatter(Y, labels, title, out_png):
+        plt.figure(figsize=(6, 6))
+        scatter = plt.scatter(Y[:, 0], Y[:, 1], c=labels, cmap="tab10", s=8, alpha=0.8)
+        plt.axis("off")
+        plt.title(title)
+        plt.tight_layout()
+        # Add legend
+        legend1 = plt.legend(
+            *scatter.legend_elements(), title="Classes", loc="upper right"
+        )
+        plt.gca().add_artist(legend1)
+        plt.savefig(out_png, dpi=300)
+        plt.close()
 
 
 # --------------------------------------------------
-def dimensionality_reduction(z, labels, method="umap", pca_dim=None, **kwargs):
-    Z = z.numpy()
-    if pca_dim is not None and pca_dim > 0 and Z.shape[1] > pca_dim:
-        Z = PCA(n_components=pca_dim).fit_transform(Z)
-    if method == "umap":
-        reducer = umap.UMAP(**kwargs)
-    elif method == "tsne":
-        reducer = TSNE(**kwargs)
-    else:
-        raise ValueError(method)
-
-    Y = reducer.fit_transform(Z)
-    return Y
-
-def scatter(Y, labels, title, out_png):
-    plt.figure(figsize=(6, 6))
-    scatter = plt.scatter(Y[:, 0], Y[:, 1], c=labels, cmap="tab10", s=8, alpha=0.8)
-    plt.axis("off")
-    plt.title(title)
-    plt.tight_layout()
-    # Add legend
-    legend1 = plt.legend(*scatter.legend_elements(), title="Classes", loc="upper right")
-    plt.gca().add_artist(legend1)
-    plt.savefig(out_png, dpi=300)
-    plt.close()
-
-
-# --------------------------------------------------
-def main():
-    args = get_args()
-    os.makedirs(args.outdir, exist_ok=True)
-    set_seed(args.seed)
-
-    # ---------------- Load conf & build dataset ----------
-    conf = yaml.safe_load(open(args.conf))
-    conf = overwrite_conf(conf, {"debug": False})  # ensure standard run
-
+def main(conf):
+    # Load config
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    decoder_hidden_dim_list = [conf["scalegmn_args"]["d_hid"]*elem for elem in conf["decoder_args"]["d_hidden"]] 
+    decoder_hidden_dim_list = [
+        conf["scalegmn_args"]["d_hid"] * elem
+        for elem in conf["decoder_args"]["d_hidden"]
+    ]
     conf["decoder_args"]["d_hidden"] = decoder_hidden_dim_list
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -127,42 +131,52 @@ def main():
 
     # ---------------- Model ------------------------------
     net = get_autoencoder(conf, autoencoder_type="inr").to(device)
-    net.load_state_dict(torch.load(args.ckpt, map_location=device))
+    # net.load_state_dict(torch.load(args.ckpt, map_location=device))
     net.eval()
 
-    # ---------------- Collect latents --------------------
-    global zs  # used inside decode_grid
-    zs, ys, wbs = collect_latents(net, loader, device)
-    print(
-        f"Collected {len(zs)} latent codes of dim {zs.shape[1]} from {args.split} split."
-    )
-
-    # ---------------- Dim-red ----------------------------
-
-    emb_umap = dimensionality_reduction(
-        zs,
-        ys,
-        method="umap",
-        pca_dim=args.pca_dim,
+    # ------------------ Dimensionality reduction -----------
+    umap_reducer = DimensionalityReducer(
+        method=umap,
         n_neighbors=10,
         min_dist=0.1,
         n_components=2,
         metric="cosine",
+        random_state=42,
     )
-    emb_tsne = dimensionality_reduction(
-        zs,
-        ys,
-        method="tsne",
-        pca_dim=args.pca_dim,
+
+    tsne_reducer = DimensionalityReducer(
+        method=TSNE,
+        n_components=2,
         perplexity=10,
         init="pca",
         learning_rate="auto",
+        random_state=42,
     )
 
-    scatter(emb_umap, ys, f"UMAP - {args.split}", os.path.join(args.outdir, "umap.png"))
-    scatter(emb_tsne, ys, f"t-SNE - {args.split}", os.path.join(args.outdir, "tsne.png"))
-    print("Saved 2-D scatter plots to", args.outdir)
+    # Run UMAP
+    umap_reducer.full_pipeline(
+        model=net,
+        loader=loader,
+        device=device,
+        save_path=os.path.join(args.outdir, "umap"),
+    )
+
+    # Run t-SNE
+    tsne_reducer.full_pipeline(
+        model=net,
+        loader=loader,
+        device=device,
+        save_path=os.path.join(args.outdir, "tsne"),
+    )
 
 
 if __name__ == "__main__":
-    main()
+    args = get_args()
+    os.makedirs(args.outdir, exist_ok=True)
+    set_seed(args.seed)
+
+    # ---------------- Load conf & build dataset ----------
+    conf = yaml.safe_load(open(args.conf))
+    conf = overwrite_conf(conf, {"debug": False})  # ensure standard run
+
+    main(conf=conf)

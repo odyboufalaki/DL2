@@ -1,6 +1,5 @@
 *.out
 *.job
-*.png
 *.pt
 .env
 /data/
@@ -8,4 +7,4 @@
 __pycache__/
 /wandb/
 .DS_STORE
-outputs/
+/outputs/

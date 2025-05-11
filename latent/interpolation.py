@@ -13,9 +13,10 @@ Transform = Callable[[Tensor, Tensor, Tensor], Tuple[Tensor, Tensor, Tensor]]
 
 from src.utils.helpers import set_seed
 from src.phase_canonicalization.test_inr import test_inr
+from src.scalegmn.inr import INR
+from src.data.base_datasets import Batch
 
 
-# --------------------------------------------------
 def get_args():
     p = argparse.ArgumentParser()
     p.add_argument(
@@ -26,12 +27,9 @@ def get_args():
     return p.parse_args()
 
 
-# ------------------------------------------------
-
-
-# ---------------------------------------------------------------------
-# 1.  A generic transformation ------------------------------------------------
-def row_sign_flip(
+# ------------------------------
+# Group transformation functions
+def _row_sign_flip(
     w: Tensor, b: Tensor, w_next: Tensor
 ) -> Tuple[Tensor, Tensor, Tensor]:
     """
@@ -45,12 +43,10 @@ def row_sign_flip(
     return w, b, w_next
 
 
-# ---------------------------------------------------------------------
-# 2.  “Transform any layer” utility -----------------------------------
-def transform_layer(
+def _transform_layer(
     sd: StateDict,
     layer_idx: int,
-    transform: Transform = row_sign_flip,
+    transform: Transform = _row_sign_flip,
     prefix: str = "seq.",
 ) -> StateDict:
     """
@@ -61,7 +57,7 @@ def transform_layer(
     ----------
     sd          : the state-dict (is shallow-copied for safety)
     layer_idx   : 0-based index of the layer whose (W, b) you want to modify
-    transform   : fn( weight, bias, next_weight ) -> (W′, b′, next_W′)
+    transform   : fn( weight, bias, next_weight ) -> (W', b', next_W')
     prefix      : key prefix used in the state-dict (default “seq.”)
 
     Notes
@@ -89,36 +85,41 @@ def transform_layer(
     return new_sd
 
 
-def transform_module_layer(
-    model: torch.nn.Sequential, layer_idx: int, transform: Transform = row_sign_flip
+def get_augmented_dataset(
+    device: torch.device,
+    inr_path: str,
 ):
-    if layer_idx + 1 >= len(model):
-        raise ValueError("Cannot transform the final layer")
-    with torch.no_grad():
-        w, b = model[layer_idx].weight.data, model[layer_idx].bias.data
-        w_next = model[layer_idx + 1].weight.data
-        w, b, w_next = transform(w, b, w_next)
-        model[layer_idx].weight.data.copy_(w)
-        model[layer_idx].bias.data.copy_(b)
-        model[layer_idx + 1].weight.data.copy_(w_next)
-    return model
+    """
+    Augment the dataset by applying random group transformations on the
+    weights and biases of the input INR. The transformations are applied to
 
+    Parameters
+    ----------
+    device : torch.device
+        The device (CPU or GPU) on which the dataset will be processed.
+    Returns
+    Batch
+        The augmented dataset as a Batch object, containing the transformed
+        weights and biases of the model.
 
-# --------------------------------------------------
-def main():
-    print("Hello")
+    """
+
+    torch.manual_seed(0)
+    print("Buenos días")
     args = get_args()
     os.makedirs(args.outdir, exist_ok=True)
     set_seed(args.seed)
 
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"  # ensure deterministic behavior
+    # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"  # ensure deterministic behavior
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load arbitrary INR
 
-    path = "/Users/administrador/Desktop/amsterdam/1.2/DL2/DL2/data/mnist-inrs/mnist_png_training_2_23089/checkpoints/model_final.pth"
-    data = torch.load(path, map_location="cpu")
+    sd = torch.load(inr_path, map_location=device)
+
+    original_inr = INR()
+    original_inr.load_state_dict(sd)
 
     """
     data = {
@@ -129,35 +130,45 @@ def main():
         "seq.2.weight": (1, 32),
         "seq.2.bias": (1),
     """
-
-    NUMBER_OF_AUGMENTATIONS = 1
+    NUMBER_OF_AUGMENTATIONS = 2
     L = 2  # Total number of hidden layers
 
-    print("Saving original INR")
-    test_inr(
-        [data[f"seq.{j}.weight"].unsqueeze(0) for j in range(3)],
-        [data[f"seq.{j}.bias"].unsqueeze(0) for j in range(3)],
-        permuted_weights=False,
-        save=True,
-        img_name="original",
-    )
+    # weights = [(
+    #   WEIGHTS LAYER 0 --> BATH_SIZE x 32 x 2
+    # )
+    weights, biases = [[], [], []], [[], [], []]
 
     # Perform augmentation
     for i in range(NUMBER_OF_AUGMENTATIONS):
         layer_to_flip = torch.randint(0, L, (1,)).item()  # pick a random layer
-        data = transform_layer(data, layer_to_flip)  # apply the transformation
+        sd = _transform_layer(
+            sd=sd,
+            layer_idx=layer_to_flip,
+        )  # apply the transformation
 
-        weights = [data[f"seq.{j}.weight"].unsqueeze(0) for j in range(3)]
-        biases = [data[f"seq.{j}.bias"].unsqueeze(0) for j in range(3)]
+        for j in [0, 1, 2]:
+            weights[j].append(sd[f"seq.{j}.weight"].unsqueeze(0))
+            biases[j].append(sd[f"seq.{j}.bias"].unsqueeze(0))
 
-        test_inr(
-            weights,
-            biases,
-            permuted_weights=False,
-            save=True,
-            img_name=f"augmented_{i}",
-        )
+    for j in [0, 1, 2]:
+        weights[j] = torch.cat(weights[j], dim=0)
+        biases[j] = torch.cat(biases[j], dim=0)
+
+    print(weights[0].shape)
+    Batch(weights=weights, biases=biases, label=NUMBER_OF_AUGMENTATIONS * [2])
+    batch = batch.to(device)
 
 
-if __name__ == "__main__":
-    main()
+# Load the model
+path = "/Users/administrador/Desktop/amsterdam/1.2/DL2/DL2/data/mnist-inrs/mnist_png_training_2_23089/checkpoints/model_final.pth"
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Get the augmented dataset
+batch = get_augmented_dataset(device, path)
+
+# Load model
+
+# Pass batch through encoder -> Obtain latent representations
+
+#
