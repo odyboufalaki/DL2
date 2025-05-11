@@ -11,12 +11,12 @@ import logging
 from pathlib import Path
 import numpy as np
 from tqdm import tqdm
-import hydra
+
 import torch
 import torch.multiprocessing as mp
 import torch.nn.functional as F
 import wandb
-from omegaconf import OmegaConf
+
 from torch import nn
 from torch.cuda.amp import GradScaler
 from torch.distributed import destroy_process_group
@@ -28,8 +28,25 @@ from src.scalegmn.autoencoder import create_batch_wb
 from src.neural_graphs.experiments.utils import count_parameters, ddp_setup, set_logger, set_seed
 from torch_geometric.utils import to_dense_adj
 from src.neural_graphs.nn.gnn import to_pyg_batch
+import sys
 
+def get_args():
+    p = argparse.ArgumentParser(add_help=False)   # note: disable default help so “-h” still works
+    p.add_argument("--ckpt",    type=str, default="outputs/2025-05-11/16-21-51/5gzpb5lt/best_val.ckpt")
+    p.add_argument("--split",   type=str, default="test", choices=["train","val","test"])
+    p.add_argument("--outdir",  type=str, default="latent/resources/manifold_ablation")
+    p.add_argument("--seed",    type=int, default=0)
+    p.add_argument("--pca_dim", type=int, default=None)
+    args, unknown = p.parse_known_args()
+    # strip your args out of sys.argv so Hydra never sees them
+    sys.argv = [sys.argv[0]] + unknown
+    return args
 
+# **must** be done before Hydra is ever imported
+args = get_args()
+
+import hydra
+from omegaconf import OmegaConf
 
 # --------------------------------------------------
 @torch.no_grad()
@@ -226,34 +243,12 @@ def train_ddp(rank, cfg, hydra_cfg):
 """
 
 # --------------------------------------------------
-def get_args():
-    p = argparse.ArgumentParser()
-    p.add_argument(
-        "--ckpt",
-        type=str,
-        # required=True,
-        default="/Users/odyboufalis/Desktop/DL2/outputs/2025-05-11/16-21-51/5gzpb5lt/best_val.ckpt",
-        help="Path to model checkpoint (.pt or .ckpt)",
-    )
-    p.add_argument(
-        "--split", type=str, default="test", choices=["train", "val", "test"]
-    )
-    p.add_argument("--outdir", type=str, default="latent/resources/manifold_ablation")
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument(
-        "--pca_dim",
-        type=int,
-        default=None,
-        help="If >0, apply PCA to this dimension before UMAP / t-SNE",
-    )
-    return p.parse_args()
 
 
 @hydra.main(config_path="configs", config_name="base", version_base=None)
 def main(cfg):
 
-    # parse your CLI args
-    args = get_args()
+  
     OmegaConf.set_struct(cfg, False)
     # build a tiny override config
     override = {
