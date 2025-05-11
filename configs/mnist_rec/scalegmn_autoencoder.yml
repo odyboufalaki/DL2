@@ -3,7 +3,7 @@ data:
   dataset: labeled_mnist_inr
   dataset_path: ./data/mnist-inrs/
   split_path: ./data/mnist-inrs/mnist_splits.json #
-  image_size: [28,28]
+  image_size: [28, 28]
   node_pos_embed: &node_pos_embed True
   edge_pos_embed: &edge_pos_embed True
   # the below can be extracted per datapoint, but since it is the same for all, we can define it here
@@ -16,29 +16,29 @@ train_args:
   patience: 50
   seed: 0
   loss: ReconstructionLoss
-  weigthed_loss: False  # Weighted loss assigns a weight proportional to the pixel value
+  weigthed_loss: False # Weighted loss assigns a weight proportional to the pixel value
   reconstruction_type: inr # pixels or inr
   pixel_expansion: 1 # Pixel granularity for the reconstruction loss and generated images.
 
 scalegmn_args:
-  d_in_v: &d_in_v 1  # initial dimension of input nn bias
-  d_in_e: &d_in_e 1  # initial dimension of input nn weights
-  d_hid: &d_hid 128  # hidden dimension
+  d_in_v: &d_in_v 1 # initial dimension of input nn bias
+  d_in_e: &d_in_e 1 # initial dimension of input nn weights
+  d_hid: &d_hid 128 # hidden dimension
   num_layers: 4 # number of gnn layers to apply
   direction: forward
   equivariant: False
-  symmetry: sign  # symmetry
+  symmetry: sign # symmetry
   jit: False # prefer compile - compile gnn to optimize performance
   compile: False # compile gnn to optimize performance
 
-  readout_range: full_graph  # or full_graph
+  readout_range: full_graph # or full_graph
   gnn_skip_connections: True
 
-  concat_mlp_directions: False  # only for bidirectional: apply an MLP before concatenating the forward and backward directions
-  reciprocal: True  # only for bidirectional
+  concat_mlp_directions: False # only for bidirectional: apply an MLP before concatenating the forward and backward directions
+  reciprocal: True # only for bidirectional
 
-  node_pos_embed: *node_pos_embed  # use positional encodings
-  edge_pos_embed: *edge_pos_embed  # use positional encodings
+  node_pos_embed: *node_pos_embed # use positional encodings
+  edge_pos_embed: *edge_pos_embed # use positional encodings
 
   graph_init:
     d_in_v: *d_in_v
@@ -47,7 +47,7 @@ scalegmn_args:
     project_edge_feats: True
     d_node: *d_hid
     d_edge: *d_hid
-    
+
   positional_encodings:
     final_linear_pos_embed: False
     sum_pos_enc: False
@@ -67,7 +67,7 @@ scalegmn_args:
     update_node_feats_fn_skip_connections: False
     update_edge_attr: True
     dropout: 0.2
-    dropout_all: False  # False: only in between the gnn layers, True: + all mlp layers
+    dropout_all: False # False: only in between the gnn layers, True: + all mlp layers
     update_as_act: False
     update_as_act_arg: sum
     mlp_on_io: False
@@ -83,9 +83,10 @@ scalegmn_args:
     layer_norm: False
     aggregator: add
     sign_symmetrization: True
+    ablate_symmetry: False
 
   mlp_args:
-    d_k: [ *d_hid ]
+    d_k: [*d_hid]
     activation: silu
     dropout: 0.
     final_activation: identity
@@ -95,14 +96,14 @@ scalegmn_args:
     skip: False
 
   readout_args:
-    d_out: *d_hid  # final dimension of readout Permutation Invariant Scale(Sign)Net - Number of Classes for classification tasks.
-    d_rho: *d_hid  # intermediate dimension within Readout module
+    d_out: *d_hid # final dimension of readout Permutation Invariant Scale(Sign)Net - Number of Classes for classification tasks.
+    d_rho: *d_hid # intermediate dimension within Readout module
 
 decoder_args:
-  data_layer_layout: *layer_layout  # explicitly define the layer layout
-  d_input: *d_hid  # initial dimension of input nn bias
-  d_hidden: [2, 4]  # hidden dimension
-  activation: silu  # activation function
+  data_layer_layout: *layer_layout # explicitly define the layer layout
+  d_input: *d_hid # initial dimension of input nn bias
+  d_hidden: [2, 4] # hidden dimension
+  activation: silu # activation function
 
 optimization:
   clip_grad: True

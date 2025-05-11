@@ -55,18 +55,6 @@ def read_in_inr(path):
     return data
 
 
-def apply_group_action(weight, bias, next_weight):
-    Q = torch.diag(torch.tensor(weight.shape[0] * [1.0]))
-    # randomly flip the signs on Q
-    for i in range(weight.shape[0]):
-        if torch.rand(1) > 0.5:
-            Q[i, i] = -1
-    weight = Q @ weight
-    bias = Q @ bias
-    next_weight = next_weight @ torch.inverse(Q)
-    return weight, bias, next_weight
-
-
 if __name__ == "__main__":
     # Example usage
     path = "/Users/joshuarosenthal/Masters/DL2/data/mnist-inrs/mnist_png_training_7_25639/checkpoints/model_final.pth"
