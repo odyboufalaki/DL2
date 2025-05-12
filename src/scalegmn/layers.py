@@ -262,7 +262,7 @@ class InvariantLayer(nn.Module):
             )
 
     def forward(self, x: torch.Tensor, extra_features=None):
-        assert self.ablate_symmetry == False
+        # assert self.ablate_symmetry == True
         if self.ablate_symmetry:
             r = self.rho(x)
         else:

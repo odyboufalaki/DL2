@@ -56,19 +56,39 @@ class DimensionalityReducer:
             print("Saved 2-D scatter plots to", save_path)
 
     def fit_transform(self, z):
+        """
+        Applies dimensionality reduction to the input data using the specified method.
+
+        Parameters:
+            z (torch.Tensor): A PyTorch tensor containing the input data to be reduced. 
+                              It will be converted to a NumPy array for processing.
+
+        Returns:
+            numpy.ndarray: A NumPy array containing the transformed data in the reduced dimensional space.
+
+        Raises:
+            ValueError: If the specified method is not supported.
+
+        Notes:
+            - Supported methods for dimensionality reduction are:
+              - "umap": Uses the UMAP (Uniform Manifold Approximation and Projection) algorithm.
+              - "tsne": Uses the t-SNE (t-Distributed Stochastic Neighbor Embedding) algorithm.
+            - Additional parameters for the dimensionality reduction method can be passed 
+              via the `self.kwargs` dictionary.
+        """
         Z = z.numpy()
         if self.method == "umap":
             reducer = umap.UMAP(**self.kwargs)
         elif self.method == "tsne":
             reducer = TSNE(**self.kwargs)
         else:
-            raise ValueError(self.method)
+            raise ValueError(f"Method {self.method} not implemented.")
 
         Y = reducer.fit_transform(Z)
         return Y
 
     @torch.no_grad()
-    def collect_latents(model, loader, device):
+    def collect_latents(self, model, loader, device):
         """Collects the latent codes from the model encoder for all samples in the dataset.
         Args:
             model: The model to use for encoding.
@@ -89,7 +109,7 @@ class DimensionalityReducer:
             wbs.append(wb)  # raw INR params, useful for reconstructions
         return torch.cat(zs), torch.cat(ys), wbs
 
-    def scatter(Y, labels, title, out_png):
+    def scatter(self, Y, labels, title, out_png):
         plt.figure(figsize=(6, 6))
         scatter = plt.scatter(Y[:, 0], Y[:, 1], c=labels, cmap="tab10", s=8, alpha=0.8)
         plt.axis("off")
@@ -131,26 +151,26 @@ def main(conf):
 
     # ---------------- Model ------------------------------
     net = get_autoencoder(conf, autoencoder_type="inr").to(device)
-    # net.load_state_dict(torch.load(args.ckpt, map_location=device))
+    net.load_state_dict(torch.load(args.ckpt, map_location=device))
     net.eval()
 
     # ------------------ Dimensionality reduction -----------
     umap_reducer = DimensionalityReducer(
-        method=umap,
+        method="umap",
         n_neighbors=10,
         min_dist=0.1,
         n_components=2,
         metric="cosine",
-        random_state=42,
+        # random_state=42,
     )
 
     tsne_reducer = DimensionalityReducer(
-        method=TSNE,
+        method="tsne",
         n_components=2,
         perplexity=10,
         init="pca",
         learning_rate="auto",
-        random_state=42,
+        # random_state=42,
     )
 
     # Run UMAP
