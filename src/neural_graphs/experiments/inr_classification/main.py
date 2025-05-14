@@ -333,9 +333,9 @@ def train(cfg, hydra_cfg):
                 if not cfg.model.vae:
                     loss = nn.MSELoss(original_imgs, reconstructed_imgs) / cfg.num_accum
                 else:
-                    recon_loss = F.mse_loss(original_imgs, reconstructed_imgs) / cfg.num_accum
-                    kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / cfg.num_accum
-                    loss = recon_loss + kl_loss
+                    recon_loss = F.mse_loss(original_imgs, reconstructed_imgs) 
+                    kl_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim = 1))
+                    loss = (recon_loss + kl_loss)/ cfg.num_accum
 
 
             scaler.scale(loss).backward()
