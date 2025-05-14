@@ -130,7 +130,7 @@ def log_epoch_images(
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, num_batches=None):
+def evaluate(model, loader, vae ,device, num_batches=None):
     model.eval()
     loss = 0.0
     correct = 0.0
@@ -146,7 +146,10 @@ def evaluate(model, loader, device, num_batches=None):
         total += len(batch)
         #pred = out.argmax(1)
         #correct += pred.eq(batch.label).sum()
-        out = model(inputs)
+        if not vae:
+            out = model(inputs)
+        else:
+            out, mu, logvar = model(inputs)
         original_imgs = test_inr(
         batch.weights, batch.biases, permuted_weights=True, save=False
         )
@@ -154,7 +157,12 @@ def evaluate(model, loader, device, num_batches=None):
         reconstructed_imgs = test_inr(
         w_recon, b_recon, save=True, img_name="autoencoder_recon"
             )  # Save with specific
-        loss += F.mse_loss(original_imgs, reconstructed_imgs)*len(batch) 
+        if not vae:
+            loss += F.mse_loss(original_imgs, reconstructed_imgs)*len(batch) 
+        else:
+            recon_loss = F.mse_loss(original_imgs, reconstructed_imgs) 
+            kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) 
+            loss += (recon_loss + kl_loss)*len(batch)
         #predicted.extend(pred.cpu().numpy().tolist())
         #gt.extend(batch.label.cpu().numpy().tolist())
 
@@ -264,7 +272,6 @@ def train(cfg, hydra_cfg):
         scheduler = None
 
     #criterion = nn.CrossEntropyLoss()
-    criterion = nn.MSELoss()
     best_val_loss = float("inf")
     best_test_results, best_val_results = None, None
     test_loss = float("inf")
@@ -311,7 +318,10 @@ def train(cfg, hydra_cfg):
             
 
             with torch.autocast(**autocast_kwargs):
-                out = model(inputs)
+                if not cfg.model.vae:
+                    out = model(inputs)
+                else:
+                    out, mu, logvar = model(inputs)
                 original_imgs = test_inr(
                 batch.weights, batch.biases, permuted_weights=True, save=False
                 )
@@ -320,8 +330,13 @@ def train(cfg, hydra_cfg):
                 reconstructed_imgs = test_inr(
                 w_recon, b_recon)                 
                  # Save with specific
-               
-                loss = criterion(original_imgs, reconstructed_imgs) / cfg.num_accum
+                if not cfg.model.vae:
+                    loss = nn.MSELoss(original_imgs, reconstructed_imgs) / cfg.num_accum
+                else:
+                    recon_loss = F.mse_loss(original_imgs, reconstructed_imgs) / cfg.num_accum
+                    kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / cfg.num_accum
+                    loss = recon_loss + kl_loss
+
 
             scaler.scale(loss).backward()
             log = {
@@ -363,8 +378,8 @@ def train(cfg, hydra_cfg):
                     ckpt_dir / f"{epoch}.ckpt",
                 )
 
-                val_loss_dict = evaluate(model, val_loader, device)
-                test_loss_dict = evaluate(model, test_loader, device)
+                val_loss_dict = evaluate(model, val_loader, cfg.model.vae, device)
+                test_loss_dict = evaluate(model, test_loader, cfg.model.vae, device)
                 val_loss = val_loss_dict["avg_loss"]
                 #val_acc = val_loss_dict["avg_acc"]
                 test_loss = test_loss_dict["avg_loss"]

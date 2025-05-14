@@ -140,6 +140,7 @@ def get_autoencoder(model_args, autoencoder_type: str, **kwargs):
     _map = {
         "inr": _MLPAutoencoderINR,
         "pixels": _MLPAutoencoderPixels,
+        "vae_inr": _MLPAutoencoderVaeINR,
     }
     autoencoder_class = _map.get(autoencoder_type, None)
     if autoencoder_class is None:
@@ -169,6 +170,40 @@ class _MLPAutoencoderINR(Autoencoder):
         """
         z = self.encoder(x)
         return self.decoder(z)
+    
+class _MLPAutoencoderVaeINR(Autoencoder):
+    """
+    Generic MLP-based autoencoder for ScaleGMN embeddings.
+    Mirrors the encoder to reconstruct the original signal/points.
+    """
+    def __init__(self, model_args, **kwargs):
+        super().__init__()
+        self.data_layer_layout = model_args["decoder_args"]['data_layer_layout']
+        model_args["decoder_args"]["output_dim"] = sum([
+            (self.data_layer_layout[i_layer] + 1) * self.data_layer_layout[i_layer + 1]
+            for i_layer in range(len(self.data_layer_layout) - 1)
+        ])
+        self.encoder = ScaleGMN(model_args["scalegmn_args"], **kwargs)
+        self.fc_mu = nn.Linear(model_args["scalegmn_args"]["d_hid"], model_args["scalegmn_args"]["d_hid"])
+        self.fc_logvar = nn.Linear(model_args["scalegmn_args"]["d_hid"], model_args["scalegmn_args"]["d_hid"])
+
+        self.decoder = MLPDecoder(model_args["decoder_args"], **kwargs)
+
+    def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: Tensor of shape [B, input_dim]
+        returns: Tensor of shape [B, output_dim]
+        """
+        pooled_graph = self.encoder(x)
+        mu = self.fc_mu(pooled_graph)
+        logvar = self.fc_logvar(pooled_graph)
+        z = self.reparameterize(mu, logvar)
+        return self.decoder(z), mu, logvar
 
 
 class _MLPAutoencoderPixels(Autoencoder):

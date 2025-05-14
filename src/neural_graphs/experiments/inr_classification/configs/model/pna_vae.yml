@@ -1,6 +1,6 @@
 _target_: src.neural_graphs.nn.gnn.GNNForClassification
 _recursive_: False
-vae: False
+vae: True
 d_out: 1185
 d_hid: 128
 compile: False

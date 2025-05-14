@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn.functional import mse_loss
-
+import torch.nn.functional as F
 from nfn.common import WeightSpaceFeatures
 import math
 from src.data.base_datasets import Batch
@@ -13,7 +13,8 @@ def select_criterion(criterion: str, criterion_args: dict) -> nn.Module:
         'CrossEntropyLoss': nn.CrossEntropyLoss(**criterion_args),
         'MSE': nn.MSELoss(),
         'BCE': nn.BCELoss(),
-        'ReconstructionLoss': weighted_mse_loss  # Allows for weighted loss
+        'ReconstructionLoss': weighted_mse_loss,  # Allows for weighted loss,
+        'VaeLoss': variational_loss,
     }
     if criterion not in _map.keys():
         raise NotImplementedError
@@ -57,6 +58,18 @@ def L2_distance(x, x_hat, batch_size=1):
         raise NotImplemented
 
     return loss
+
+def variational_loss(input: torch.Tensor, target: torch.Tensor,
+                       mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+        # reconstruction loss
+        recon_loss = F.mse_loss(input, target)
+        # KL divergence
+        kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim = 1)
+        # average over batch
+        kld = torch.mean(kld)
+        # Total loss is the one to optimize
+        loss = recon_loss + kld
+        return loss
 
 
 def weighted_mse_loss(input, target, weight=None):

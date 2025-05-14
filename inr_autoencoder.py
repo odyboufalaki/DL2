@@ -292,8 +292,10 @@ def main(args=None):
                 biases_dev = [b.to(device) for b in wb.biases]
 
                 optimizer.zero_grad()
-                out = net(batch)
-
+                if effective_conf["train_args"]["loss"] != "VaeLoss":
+                    out = net(batch)
+                else:
+                    out, mu, logvar = net(batch)
                 # Reconstruct original images using tensors on the correct device - DO NOT SAVE IMAGE
                 original_imgs = test_inr(
                     weights_dev,
@@ -303,7 +305,7 @@ def main(args=None):
                 )
 
                 # Reconstruct autoencoder images - DO NOT SAVE IMAGE
-                if effective_conf["train_args"]["reconstruction_type"] == "inr":
+                if effective_conf["train_args"]["reconstruction_type"] == "inr" or effective_conf["train_args"]["reconstruction_type"] == "vae_inr":
                     w_recon, b_recon = create_batch_wb(
                         out
                     )  # Use default out_features=1
@@ -320,16 +322,23 @@ def main(args=None):
                     raise ValueError(
                         f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}"
                     )
-
-                loss = criterion(
-                    reconstructed_imgs,
-                    original_imgs,
-                    weight=(
-                        original_imgs
-                        if effective_conf["train_args"]["weigthed_loss"]
-                        else None
-                    ),
-                )
+                if effective_conf["train_args"]["loss"] != "VaeLoss":
+                    loss = criterion(
+                        reconstructed_imgs,
+                        original_imgs,
+                        weight=(
+                            original_imgs
+                            if effective_conf["train_args"]["weigthed_loss"]
+                            else None
+                        ),
+                    )
+                else:
+                    loss = criterion(
+                        reconstructed_imgs,
+                        original_imgs,
+                        mu=mu,
+                        logvar=logvar,
+                    )
                 print(f"loss: {loss.item()}")
 
                 curr_loss += loss.item()
@@ -608,7 +617,10 @@ def log_epoch_images(
     _, (batch, wb) = next(enumerate(tqdm(plot_epoch_loader)))
 
     batch = batch.to(device)
-    out = model(batch)
+    if effective_conf["train_args"]["loss"] != "VaeLoss":
+        out = model(batch)
+    else:
+        out, mu, logvar = model(batch)
     # step = epoch * len_dataloader + i
     # Move weights and biases to the target device
     weights_dev = [w.to(device) for w in wb.weights]
@@ -620,7 +632,7 @@ def log_epoch_images(
     )
 
     # Reconstruct autoencoder images
-    if effective_conf["train_args"]["reconstruction_type"] == "inr":
+    if effective_conf["train_args"]["reconstruction_type"] == "inr" or effective_conf["train_args"]["reconstruction_type"] == "vae_inr":
         w_recon, b_recon = create_batch_wb(out)
         reconstructed_imgs = test_inr(w_recon, b_recon, pixel_expansion=pixel_expansion)
     elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
@@ -676,7 +688,10 @@ def evaluate(
     total = 0.0
     for i, (batch, wb) in enumerate(tqdm(loader)):
         batch = batch.to(device)
-        out = model(batch)
+        if effective_conf["train_args"]["loss"] != "VaeLoss":
+            out = model(batch)
+        else:
+            out, mu, logvar = model(batch)
         # step = epoch * len_dataloader + i
         # Move weights and biases to the target device
         weights_dev = [w.to(device) for w in wb.weights]
@@ -692,7 +707,7 @@ def evaluate(
         )
 
         # Reconstruct autoencoder images
-        if effective_conf["train_args"]["reconstruction_type"] == "inr":
+        if effective_conf["train_args"]["reconstruction_type"] == "inr" or effective_conf["train_args"]["reconstruction_type"] == "vae_inr":
             w_recon, b_recon = create_batch_wb(out)  # Use default out_features=1
             reconstructed_imgs = test_inr(
                 w_recon,
@@ -712,8 +727,23 @@ def evaluate(
             raise ValueError(
                 f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}"
             )
-
-        loss = criterion(reconstructed_imgs, original_imgs)
+        if effective_conf["train_args"]["loss"] != "VaeLoss":
+            loss = criterion(
+                reconstructed_imgs,
+                original_imgs,
+                weight=(
+                    original_imgs
+                    if effective_conf["train_args"]["weigthed_loss"]
+                    else None
+                ),
+            )
+        else:
+            loss = criterion(
+                reconstructed_imgs,
+                original_imgs,
+                mu=mu,
+                logvar=logvar,
+            )
         total_loss += loss.item() * len(batch)  # Scale loss up to total sum
         total += len(batch)  # Total number of samples
 
@@ -806,7 +836,7 @@ def train_on_steps(
         )
 
         # Reconstruct autoencoder images - SAVE THIS ONE
-        if run_config["train_args"]["reconstruction_type"] == "inr":
+        if run_config["train_args"]["reconstruction_type"] == "inr" or run_config["train_args"]["reconstruction_type"] == "vae_inr":
             w_recon, b_recon = create_batch_wb(out)  # Use default out_features=1
             reconstructed_imgs = test_inr(
                 w_recon, b_recon, save=True, img_name="autoencoder_recon"

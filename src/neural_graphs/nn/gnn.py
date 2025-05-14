@@ -66,6 +66,7 @@ class GNNForClassification(nn.Module):
         graph_constructor,
         gnn_backbone,
         layer_layout,
+        vae,
         rev_edge_features,
         pooling_method,
         pooling_layer_idx,
@@ -77,7 +78,7 @@ class GNNForClassification(nn.Module):
         self.pooling_layer_idx = pooling_layer_idx
         self.nodes_per_layer = layer_layout
         self.layer_idx = torch.cumsum(torch.tensor([0] + layer_layout), dim=0)
-
+        self.vae = vae
         edge_index = nn_to_edge_index(self.nodes_per_layer, "cpu", dtype=torch.long)
         if rev_edge_features:
             edge_index = torch.cat([edge_index, edge_index.flip(dims=(0,))], dim=-1)
@@ -114,6 +115,12 @@ class GNNForClassification(nn.Module):
             nn.SiLU(),
             nn.Linear(4*d_hid, d_out),
         )
+        
+        if self.vae:
+            self.fc_mu = nn.Linear(d_out, d_out)
+            self.fc_logvar = nn.Linear(d_out, d_out)
+
+        
         gnn_kwargs = dict()
         if gnn_backbone.get("deg", False) is None:
             extended_layout = [0] + layer_layout
@@ -141,6 +148,14 @@ class GNNForClassification(nn.Module):
         edge_features = to_dense_adj(batch.edge_index, batch.batch, out_edge)
 
         graph_features = self.pool(node_features, edge_features)
+        print("VAE is enabled:", self.vae)
+        if self.vae:
+            mu = self.fc_mu(graph_features)
+            logvar = self.fc_logvar(graph_features)
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            graph_features = mu + eps * std
+            return self.proj_out(graph_features), mu, logvar
         return self.proj_out(graph_features)
 
 
