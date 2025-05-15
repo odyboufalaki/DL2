@@ -7,10 +7,9 @@ from src.scalegmn.inr import INR
 from analysis.utils import (
     collect_latents,
     load_orbit_dataset_and_model,
-    instantiate_inr_batch,
     create_tmp_torch_geometric_loader,
     remove_tmp_torch_geometric_loader,
-    perturb_inr_batch,
+    perturb_inr_all_batches,
 )
 
 def get_args():
@@ -62,17 +61,10 @@ def main():
         device=device,
     )
 
-    perturbed_dataset = []
-    for batch, wb in loader:
-        # Perturb weights and biases
-        batch_perturbed = perturb_inr_batch(
-            wb, perturbation=1e-6,
-        )
-
-        perturbed_dataset.extend(instantiate_inr_batch(
-            batch=batch_perturbed,
-            device=device,
-        ))
+    perturbed_dataset = perturb_inr_all_batches(
+        dataset=loader.dataset,
+        perturbation=1e-6,
+    )
 
     if args.debug:
         perturbed_dataset = perturbed_dataset[:10]
@@ -85,7 +77,15 @@ def main():
         device=device,
     )
 
+
+    # Forward pass
     zs, _, _ = collect_latents(
+        model=net,
+        loader=loader,
+        device=device,
+    )
+
+    zs_perturbed, _, _ = collect_latents(
         model=net,
         loader=new_loader,
         device=device,
@@ -95,6 +95,7 @@ def main():
     remove_tmp_torch_geometric_loader(
         tmp_dir="analysis/tmp_dir",
     )
+
 
 
 

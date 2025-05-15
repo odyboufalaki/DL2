@@ -126,6 +126,28 @@ def perturb_inr_batch(wb: Batch, perturbation: float) -> Batch:
         label=wb.label,
     )
 
+def perturb_inr_all_batches(
+    loader: torch_geometric.loader.DataLoader,
+    perturbation: float,
+) -> list[Batch]:
+    """Perturb the INR parameters in all batches of the dataset.
+
+    Args:
+        loader (torch_geometric.loader.DataLoader): The data loader for the dataset.
+        perturbation (float): The amount to perturb the parameters by.
+
+    Returns:
+        list[Batch]: A list of perturbed batches of INR parameters.
+    """
+    perturbed_dataset = []
+    for _, wb in loader:
+        # Perturb weights and biases
+        batch_perturbed = perturb_inr_batch(
+            wb, perturbation=perturbation,
+        )
+        perturbed_dataset.append(batch_perturbed)
+    return perturbed_dataset
+
 def create_tmp_torch_geometric_loader(
     dataset: list[INR],
     tmp_dir: str,
@@ -229,5 +251,94 @@ def instantiate_inr_batch(
     
     return dataset
 
-if __name__ == "__main__":
-    instantiate_inr_batch(None, "cpu")
+
+def instantiate_inr_all_batches(
+    loader: torch_geometric.loader.DataLoader,
+    device: torch.device,
+) -> list[INR]:
+    """
+    Instantiate INRs from the dataset.
+
+    Args:
+        loader (torch_geometric.loader.DataLoader): The data loader for the dataset.
+        device (torch.device): The device to use for computation.
+    Returns:
+        list[INR]: A list of instantiated INR objects.
+    """
+    dataset = []
+    for _, wb in loader:
+        dataset.extend(instantiate_inr_batch(
+            batch=wb,
+            device=device,
+        ))
+    return dataset
+
+
+def interpolate_inrs_batch(
+    inr_batch_1: Batch,
+    inr_batch_2: Batch,
+    alpha: float,
+    interpolation_type: str = "linear",
+) -> Batch:
+    """Interpolate between two batches of INRs.
+
+    Args:
+        inr_batch_1 (Batch): The first batch of INR parameters.
+        inr_batch_2 (Batch): The second batch of INR parameters.
+        alpha (float): The interpolation factor (0 <= alpha <= 1).
+        num_samples (int): The number of samples to generate (currently unused).
+        type (str): The type of interpolation to use.
+
+    Returns:
+        list[INR]: A list of interpolated INR objects.
+    """
+    # Interpolate between the two batches
+    if interpolation_type == "linear":
+        interpolated_weights = [
+            (1 - alpha) * w1 + alpha * w2
+            for w1, w2 in zip(inr_batch_1.weights, inr_batch_2.weights)
+        ]
+        interpolated_biases = [
+            (1 - alpha) * b1 + alpha * b2
+            for b1, b2 in zip(inr_batch_1.biases, inr_batch_2.biases)
+        ]
+    else:
+        raise ValueError(f"Interpolation type {interpolation_type} not supported.")
+
+    return Batch(
+        weights=interpolated_weights,
+        biases=interpolated_biases,
+        label=inr_batch_1.label,
+    )
+
+
+def interpolate_inrs_all_batches(
+    inr_batch_1: Batch,
+    inr_batch_2: Batch,
+    num_samples: int,
+    interpolation_type: str = "linear",
+) -> list[Batch]:
+    """Interpolate between two batches of INRs.
+
+    Args:
+        inr_batch_1 (Batch): The first batch of INR parameters.
+        inr_batch_2 (Batch): The second batch of INR parameters.
+        num_samples (int): The number of samples to generate.
+        type (str): The type of interpolation to use.
+
+    Returns:
+        list[INR]: A list of interpolated INR objects.
+    """
+    # Interpolate between the two batches
+    if type == "linear":
+        alpha_values = torch.linspace(0, 1, num_samples)
+    else:
+        raise ValueError(f"Interpolation type {type} not supported.")
+
+    interpolated_inrs = []
+    for alpha in alpha_values:
+        interpolated_inrs.append(
+            interpolate_inrs_batch(inr_batch_1, inr_batch_2, alpha, interpolation_type)
+        )
+
+    return interpolated_inrs
