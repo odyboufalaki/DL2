@@ -1,3 +1,5 @@
+import json
+import os
 import torch
 import yaml
 import torch_geometric
@@ -43,9 +45,9 @@ def load_orbit_dataset_and_model(
     conf: str,
     dataset_path: str,
     split_path: str,
-    ckpt_path: str,
     device: torch.device,
-    debug: bool = False,
+    ckpt_path: str = None,
+    return_model: bool = True,
 ) -> tuple[torch.nn.Module, torch_geometric.loader.DataLoader]:
     """
     Loads the orbit dataset and the pre-trained model.
@@ -82,8 +84,6 @@ def load_orbit_dataset_and_model(
     loader = torch_geometric.loader.DataLoader(
         split_set, batch_size=conf["batch_size"], shuffle=False
     )
-    if debug:
-        loader = [loader[0]]
     print("Loaded", len(split_set), "samples in the dataset.")
 
     # Load the model
@@ -94,11 +94,12 @@ def load_orbit_dataset_and_model(
     conf["decoder_args"]["d_hidden"] = decoder_hidden_dim_list
     conf["scalegmn_args"]["layer_layout"] = split_set.get_layer_layout()
     
-    net = get_autoencoder(conf, autoencoder_type="inr").to(device)
-    net.load_state_dict(torch.load(ckpt_path, map_location=device))
-    net.eval()
+    if return_model:
+        net = get_autoencoder(conf, autoencoder_type="inr").to(device)
+        net.load_state_dict(torch.load(ckpt_path, map_location=device))
+        net.eval()
 
-    return net, loader
+    return (net, loader) if return_model else loader
 
 def perturb_inr_batch(wb: Batch, perturbation: float) -> Batch:
     """Perturb the INR parameters in the batch by a small amount.
@@ -125,23 +126,27 @@ def perturb_inr_batch(wb: Batch, perturbation: float) -> Batch:
         label=wb.label,
     )
 
-
-def dump_dataset_to_tmp_dir(
+def create_tmp_torch_geometric_loader(
     dataset: list[INR],
-    tmp_dir: str = "analysis/tmp/tmp_dataset",
-) -> torch_geometric.data.Dataset:
+    tmp_dir: str,
+    conf: dict,
+    device: torch.device,
+) -> torch_geometric.loader.DataLoader:
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir, exist_ok=True)
 
+    print(f"Creating temporary torch geometric loader from checkpoints in {tmp_dir}...")
+
+    splits_json = dict()
+    splits_json["test"] = {"path": [], "label": []}
     for inr_id, inr in enumerate(dataset):
         # Save the transformed INR to the output directory
         output_path_dir = os.path.join(
-            output_dir,
-            args.inr_path.split("/")[2] + "_augmented_" + str(inr_id),
+            tmp_dir,
+            str(inr_id),
             "checkpoints",
         )
-        if not os.path.exists(output_path_dir):
-            os.makedirs(output_path_dir)
+        os.makedirs(output_path_dir, exist_ok=True)
 
         output_path = os.path.join(
             output_path_dir,
@@ -149,10 +154,80 @@ def dump_dataset_to_tmp_dir(
         )
         # {"test": {"path": ["data/mnist-inrs/mnist
         splits_json["test"]["path"].append(output_path)
+        splits_json["test"]["label"].append("2")
         torch.save(inr.state_dict(), output_path)
 
     # Save the splits JSON file
-    with open(os.path.join(output_dir, "mnist_orbit_splits.json"), "w") as f:
+    with open(os.path.join(tmp_dir, "splits.json"), "w") as f:
         json.dump(splits_json, f, indent=4)
 
-    print(f"Saved {args.dataset_size} orbit samples to {output_dir}.")
+    # Load the dataset
+    loader = load_orbit_dataset_and_model(
+        conf=conf,
+        dataset_path=tmp_dir,
+        split_path=os.path.join(tmp_dir, "splits.json"),
+        device=device,
+        return_model=False,
+    )
+
+    return loader
+
+    
+def remove_tmp_torch_geometric_loader(
+    tmp_dir: str
+):
+    print(f"Removing temporary directory {tmp_dir}...")
+    # Remove the temporary directory
+    for inr_id in range(len(os.listdir(tmp_dir))):
+        parent_dir = os.path.join(tmp_dir, str(inr_id))
+        output_path_dir = os.path.join(
+            parent_dir,
+            "checkpoints",
+        )
+        if os.path.exists(output_path_dir):
+            for file in os.listdir(output_path_dir):
+                os.remove(os.path.join(output_path_dir, file))
+            os.rmdir(output_path_dir)        
+            os.rmdir(parent_dir)
+            
+    if os.path.exists(os.path.join(tmp_dir, "splits.json")):
+        os.remove(os.path.join(tmp_dir, "splits.json"))
+    os.rmdir(tmp_dir)
+
+
+def instantiate_inr_batch(
+    batch: Batch,
+    device: torch.device,
+) -> list[INR]:
+    """Instantiate an INR object from the batch of parameters.
+
+    Args:
+        wb (Batch): The batch of INR parameters.
+
+    Returns:
+        INR: The instantiated INR object.
+    """
+    ## INR State dict
+    # seq.0.weight: torch.Size([32, 2])
+    # seq.0.bias: torch.Size([32])
+    # seq.1.weight: torch.Size([32, 32])
+    # seq.1.bias: torch.Size([32])
+    # seq.2.weight: torch.Size([1, 32])
+    # seq.2.bias: torch.Size([1])
+
+    dataset = []
+    batch_size = len(batch.weights[0])
+    for inr_id in range(batch_size):
+        inr = INR()
+        state_dict = inr.state_dict()
+        for i, (weight, bias) in enumerate(zip(batch.weights, batch.biases)):
+            state_dict[f"seq.{i}.weight"] = weight[inr_id].squeeze(-1).transpose(-1, 0)
+            state_dict[f"seq.{i}.bias"] = bias[inr_id].squeeze(-1).transpose(-1, 0)
+        inr.load_state_dict(state_dict)
+        inr.eval()
+        dataset.append(inr.to(device))
+    
+    return dataset
+
+if __name__ == "__main__":
+    instantiate_inr_batch(None, "cpu")

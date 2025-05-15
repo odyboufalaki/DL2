@@ -185,8 +185,6 @@ def generate_augmented_dataset(
     inr_label = inr_path.split("/")[-3].split("_")[-2]
 
     past_random_history = []
-    splits_json = dict()
-    splits_json["test"] = {"path": [], "label": args.dataset_size * [inr_label]}
     dataset = []
     for inr_id in tqdm(range(args.dataset_size), desc="Generating augmented dataset"):
         layer_to_flip = torch.randint(0, len(INR_LAYER_ARCHITECTURE) - 2, (1,)).item()  # pick a random layer
@@ -213,6 +211,8 @@ def generate_augmented_dataset(
     # If it fails the test, it will raise an AssertionError and stop the execution
     test_augmented_dataset(dataset, device, tolerance=1e-5)
 
+    splits_json = dict()
+    splits_json["test"] = {"path": [], "label": args.dataset_size * [inr_label]}
     for inr_id, inr in enumerate(dataset):
         # Save the transformed INR to the output directory
         output_path_dir = os.path.join(

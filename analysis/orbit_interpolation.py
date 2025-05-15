@@ -3,9 +3,13 @@ import argparse
 import os
 
 from src.utils.helpers import set_seed
+from src.scalegmn.inr import INR
 from analysis.utils import (
     collect_latents,
     load_orbit_dataset_and_model,
+    instantiate_inr_batch,
+    create_tmp_torch_geometric_loader,
+    remove_tmp_torch_geometric_loader,
     perturb_inr_batch,
 )
 
@@ -36,7 +40,7 @@ def get_args():
     p.add_argument("--split", type=str, default="test")
     p.add_argument("--outdir", type=str, default="latent/resources/orbit_analysis")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--debug", type=int, default=0)
+    p.add_argument("--debug", action="store_true", help="Enable debug mode")
     return p.parse_args()
 
 
@@ -56,16 +60,42 @@ def main():
         split_path=args.split_path,
         ckpt_path=args.ckpt,
         device=device,
-        debug=args.debug,
     )
 
-    zs, _, _ = collect_latents(net, loader, device)  # [DATASET_SIZE, latent_dim]
-
+    perturbed_dataset = []
     for batch, wb in loader:
+        # Perturb weights and biases
         batch_perturbed = perturb_inr_batch(
             wb, perturbation=1e-6,
         )
-        break
+
+        perturbed_dataset.extend(instantiate_inr_batch(
+            batch=batch_perturbed,
+            device=device,
+        ))
+
+    if args.debug:
+        perturbed_dataset = perturbed_dataset[:10]
+
+    # Create torch gometric loader
+    new_loader = create_tmp_torch_geometric_loader(
+        dataset=perturbed_dataset,
+        tmp_dir="analysis/tmp_dir",
+        conf=args.conf,
+        device=device,
+    )
+
+    zs, _, _ = collect_latents(
+        model=net,
+        loader=new_loader,
+        device=device,
+    )
+
+    # Delete tmp dir
+    remove_tmp_torch_geometric_loader(
+        tmp_dir="analysis/tmp_dir",
+    )
+
 
 
 if __name__ == "__main__":
