@@ -1,5 +1,7 @@
 import json
 import os
+
+import numpy as np
 from src.scalegmn.models import ScaleGMN
 import torch
 import yaml
@@ -14,6 +16,8 @@ from src.data.base_datasets import Batch
 from src.scalegmn.inr import INR
 from PIL import Image
 import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
+
 
 
 @torch.no_grad()
@@ -68,9 +72,6 @@ def load_orbit_dataset_and_model(
             - net (torch.nn.Module): The loaded model.
             - loader (torch_geometric.loader.DataLoader): The data loader for the dataset.
     """
-    conf = yaml.safe_load(open(conf))
-    conf = overwrite_conf(conf, {"debug": False})  # ensure standard run
-
     # Overwrite the dataset path
     conf["data"]["dataset_path"] = dataset_path
 
@@ -259,7 +260,7 @@ def instantiate_inr_batch(
 
 
 def instantiate_inr_all_batches(
-    loader: torch_geometric.loader.DataLoader,
+    all_batches: list[Batch],
     device: torch.device,
 ) -> list[INR]:
     """
@@ -272,7 +273,7 @@ def instantiate_inr_all_batches(
         list[INR]: A list of instantiated INR objects.
     """
     dataset = []
-    for _, wb in loader:
+    for wb in all_batches:
         dataset.extend(instantiate_inr_batch(
             batch=wb,
             device=device,
@@ -280,7 +281,7 @@ def instantiate_inr_all_batches(
     return dataset
 
 
-def interpolate_inrs_batch(
+def interpolation_step_batch(
     inr_batch_1: Batch,
     inr_batch_2: Batch,
     alpha: float,
@@ -292,11 +293,10 @@ def interpolate_inrs_batch(
         inr_batch_1 (Batch): The first batch of INR parameters.
         inr_batch_2 (Batch): The second batch of INR parameters.
         alpha (float): The interpolation factor (0 <= alpha <= 1).
-        num_samples (int): The number of samples to generate (currently unused).
         type (str): The type of interpolation to use.
 
     Returns:
-        list[INR]: A list of interpolated INR objects.
+        Batch: A list of interpolated INR objects.
     """
     # Interpolate between the two batches
     if interpolation_type == "linear":
@@ -318,7 +318,7 @@ def interpolate_inrs_batch(
     )
 
 
-def interpolate_inrs_all_batches(
+def interpolate_batch(
     inr_batch_1: Batch,
     inr_batch_2: Batch,
     num_samples: int,
@@ -330,13 +330,13 @@ def interpolate_inrs_all_batches(
         inr_batch_1 (Batch): The first batch of INR parameters.
         inr_batch_2 (Batch): The second batch of INR parameters.
         num_samples (int): The number of samples to generate.
-        type (str): The type of interpolation to use.
+        interpolation_type (str): The type of interpolation to use.
 
     Returns:
-        list[INR]: A list of interpolated INR objects.
+        list[Batch]: A list of interpolated INR objects.
     """
     # Interpolate between the two batches
-    if type == "linear":
+    if interpolation_type == "linear":
         alpha_values = torch.linspace(0, 1, num_samples)
     else:
         raise ValueError(f"Interpolation type {type} not supported.")
@@ -344,7 +344,7 @@ def interpolate_inrs_all_batches(
     interpolated_inrs = []
     for alpha in alpha_values:
         interpolated_inrs.append(
-            interpolate_inrs_batch(inr_batch_1, inr_batch_2, alpha, interpolation_type)
+            interpolation_step_batch(inr_batch_1, inr_batch_2, alpha, interpolation_type)
         )
 
     return interpolated_inrs
@@ -371,3 +371,39 @@ def load_ground_truth_image(
     image_tensor = transform(image).to(device)
 
     return image_tensor
+
+
+def plot_interpolation_curve(
+    loss_matrix: torch.Tensor,
+    save_path: str = None,
+) -> None:
+    """Plot the interpolation curve.
+
+    Args:
+        loss_matrix (torch.Tensor): The loss matrix to plot of shapee [BATCH_SIZE, NUM_INTERPOLATION_SAMPLES].
+    """
+    loss_mean_curve = loss_matrix.mean(dim=0).cpu().numpy().astype(np.float64)
+    loss_std_curve = loss_matrix.std(dim=0).cpu().numpy().astype(np.float64)
+
+    plt.ylim(0, loss_mean_curve.max() * 5)
+    plt.plot(
+        np.arange(len(loss_mean_curve)) / len(loss_mean_curve),
+        loss_mean_curve,
+        label="Interpolation"
+    )
+    plt.fill_between(
+        np.arange(len(loss_mean_curve)) / len(loss_mean_curve),
+        loss_mean_curve - loss_std_curve,
+        loss_mean_curve + loss_std_curve,
+        alpha=0.3,
+        label="IQR",
+    )
+    plt.xlabel("Interpolation Step")
+    plt.ylabel("Loss")
+    plt.title("Interpolation Loss Curve")
+    plt.legend()
+    plt.show()
+
+    if save_path:
+        plt.savefig(save_path)
+        print(f"Interpolation curve saved to {save_path}")

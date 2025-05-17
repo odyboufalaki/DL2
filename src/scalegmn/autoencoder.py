@@ -13,7 +13,7 @@ def create_batch_wb(
     n_layers: int = 3,
     hidden_features: int = 32,
     out_features: int = 1,
-    ) -> nn.Module:
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """
     Reconstruct the state dict of an INR model from a flat parameter vector.
 
@@ -26,8 +26,8 @@ def create_batch_wb(
         fix_pe:          INR.__init__ fix_pe
 
     Returns:
-        new_sd:         state_dict of the INR model with the same architecture as the original
-                        but with the weights and biases replaced by those in flat_params.
+        weights:         List of tensors containing the weights of the INR model.
+        biases:          List of tensors containing the biases of the INR model.
     """
     # Instantiate fresh INR
     model = INR(
