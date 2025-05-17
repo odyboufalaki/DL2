@@ -22,10 +22,11 @@ from analysis.utils import (
     perturb_inr_all_batches,
     load_ground_truth_image,
     interpolate_batch,
-    plot_interpolation_curve,
+    plot_interpolation_curves,
 )
 from src.scalegmn.autoencoder import create_batch_wb
 from src.phase_canonicalization.test_inr import test_inr
+from tqdm import tqdm
 
 NUM_INTERPOLATION_SAMPLES = 10
 BATCH_SIZE = 35
@@ -85,7 +86,6 @@ def inr_loss_batches(
     
     weights_dev = [w.to(device) for w in batch.weights]
     biases_dev = [b.to(device) for b in batch.biases]
-    print(reconstructed, weights_dev[0].shape, biases_dev[0].shape)
     imgs = test_inr(
         weights_dev,
         biases_dev,
@@ -103,6 +103,15 @@ def compute_loss_matrix(
 ) -> torch.Tensor:
     """
     Compute the loss matrix for the given dataset using the INR model.
+
+    Args:
+        interpolated_batches (list[Batch]): List of batches to compute the loss for.
+        mnist_ground_truth_img (torch.Tensor): Ground truth image for the dataset.
+        device (torch.device): Device to perform the computation on.
+        reconstructed (bool): Whether the weights are reconstructed or not.
+
+    Returns:
+        torch.Tensor: Loss matrix of shape (BATCH_SIZE, NUM_INTERPOLATION_SAMPLES).
     """
     loss_matrix = []
     for interpolated_batch in interpolated_batches:
@@ -113,41 +122,9 @@ def compute_loss_matrix(
             reconstructed=reconstructed,
         )
         loss_matrix.append(loss)
-    loss_matrix = torch.stack(loss_matrix).T
+    loss_matrix = torch.stack(loss_matrix).permute(1, 0)
     return loss_matrix
 
-
-def compare_losses(
-    net: ScaleGMN,
-    loader: torch_geometric.data.DataLoader,
-    device: torch.device,
-):
-    mnist_ground_truth_img = "data/mnist/train/2/23089.png"
-    mnist_ground_truth_img = load_ground_truth_image(
-        mnist_ground_truth_img,
-        device=device,
-    )
-
-    for _, wb in loader:
-        loss_vector = inr_loss_batches(
-            batch=wb,
-            loss_fn=partial(inr_loss, mnist_ground_truth_img.unsqueeze(0)),
-            device=device,
-            reconstructed=False,
-        )
-        print("Original INRs loss", loss_vector.mean().item())
-        break
-
-    for batch, wb in loader:
-        batch = batch.to(device)
-        loss_vector = inr_loss_batches(
-            batch=net(batch),
-            loss_fn=partial(inr_loss, mnist_ground_truth_img.unsqueeze(0)),
-            device=device,
-            reconstructed=True,
-        )
-        print("Reconstructed INRs loss", loss_vector.mean().item())
-        break
 
 @torch.no_grad()
 def main():
@@ -170,12 +147,6 @@ def main():
         ckpt_path=args.ckpt,
         device=device,
     )
-
-    # compare_losses(
-    #     net=net,
-    #     loader=loader,
-    #     device=device,
-    # )
 
     perturbed_dataset_batches: list[Batch]
     perturbed_dataset_batches = perturb_inr_all_batches(
@@ -208,12 +179,15 @@ def main():
         device=device,
     )
 
-    for (batch_original, wb_original), (batch_perturbed, wb_perturbed) in zip(loader, loader_perturbed):
+    loss_matrix_original, loss_matrix_reconstruction = [], []
+    for (batch_original, wb_original), (batch_perturbed, wb_perturbed) in tqdm(
+        zip(loader, loader_perturbed), desc="Processing batches", total=len(loader)
+    ):
         batch_original = batch_original.to(device)
         batch_perturbed = batch_perturbed.to(device)
         wb_original = wb_original.to(device)
         wb_perturbed = wb_perturbed.to(device)
-
+        
         # Interpolation in original weight space
         interpolated_batches: list[Batch]  # [NUM_INTERPOLATION_SAMPLES, Batch]
         interpolated_batches = interpolate_batch(
@@ -225,13 +199,9 @@ def main():
             interpolated_batches=interpolated_batches,
             mnist_ground_truth_img=mnist_ground_truth_img,
             device=device,
+            reconstructed=True,
         )
-
-        # Plot interpolation curve
-        plot_interpolation_curve(
-            loss_matrix=loss_matrix,
-            save_path="analysis/resources/interpolation/interpolation_curve.png",
-        )
+        loss_matrix_original.append(loss_matrix)
 
         # Interpolation in reconstructed weight space
         w_reconstructed_original, b_reconstructed_original = create_batch_wb(
@@ -262,37 +232,30 @@ def main():
         )
 
         # loss_matrix_reconstruction [BATCH_SIZE, NUM_INTERPOLATION_SAMPLES]
-        loss_matrix_reconstruction = compute_loss_matrix(
+        loss_matrix = compute_loss_matrix(
             interpolated_batches=interpolated_batches_reconstruction,
             mnist_ground_truth_img=mnist_ground_truth_img,
             device=device,
-            reconstructed=True,
         )
+        loss_matrix_reconstruction.append(loss_matrix)
 
-        # Plot interpolation curve
-        plot_interpolation_curve(
-            loss_matrix=loss_matrix_reconstruction,
-            save_path="analysis/resources/interpolation/interpolation_curve_reconstruction.png",
-        )
-        
-
-    # # Forward pass
-    # zs, _, _ = collect_latents(
-    #     model=net,
-    #     loader=loader,
-    #     device=device,
-    # )
-
-    # zs_perturbed, _, _ = collect_latents(
-    #     model=net,
-    #     loader=perturbed_loader,
-    #     device=device,
-    # )
+    loss_matrix_original = torch.cat(loss_matrix_original, dim=0)
+    loss_matrix_reconstruction = torch.cat(loss_matrix_reconstruction, dim=0)
 
     # Delete tmp dir
     remove_tmp_torch_geometric_loader(
         tmp_dir="analysis/tmp_dir",
     )
+
+    # Plot interpolation curve
+    plot_interpolation_curves(
+        loss_matrices=[
+            (loss_matrix_original, "Original"),
+            (loss_matrix_reconstruction, "Reconstructed")
+        ],
+        save_path="analysis/resources/interpolation/interpolation.png",
+    )
+
 
 
 if __name__ == "__main__":

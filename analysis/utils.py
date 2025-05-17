@@ -373,37 +373,46 @@ def load_ground_truth_image(
     return image_tensor
 
 
-def plot_interpolation_curve(
-    loss_matrix: torch.Tensor,
+def plot_interpolation_curves(
+    loss_matrices: list[tuple[torch.Tensor, str]],
     save_path: str = None,
 ) -> None:
-    """Plot the interpolation curve.
+    """Plot multiple interpolation curves.
 
     Args:
-        loss_matrix (torch.Tensor): The loss matrix to plot of shapee [BATCH_SIZE, NUM_INTERPOLATION_SAMPLES].
+        loss_matrices (list[tuple[torch.Tensor, str]]): A list of tuples where each tuple contains:
+            - A loss matrix of shape [BATCH_SIZE, NUM_INTERPOLATION_SAMPLES].
+            - A string representing the name/label for the curve.
+        save_path (str): Path to save the plot (optional).
     """
-    loss_mean_curve = loss_matrix.mean(dim=0).cpu().numpy().astype(np.float64)
-    loss_std_curve = loss_matrix.std(dim=0).cpu().numpy().astype(np.float64)
+    plt.ylim(0, max([loss_matrix.mean(dim=0).max().item() for loss_matrix, _ in loss_matrices]) * 5)
 
-    plt.ylim(0, loss_mean_curve.max() * 5)
-    plt.plot(
-        np.arange(len(loss_mean_curve)) / len(loss_mean_curve),
-        loss_mean_curve,
-        label="Interpolation"
-    )
-    plt.fill_between(
-        np.arange(len(loss_mean_curve)) / len(loss_mean_curve),
-        loss_mean_curve - loss_std_curve,
-        loss_mean_curve + loss_std_curve,
-        alpha=0.3,
-        label="IQR",
-    )
+    for loss_matrix, label in loss_matrices:
+        loss_mean_curve = loss_matrix.mean(dim=0).cpu().numpy().astype(np.float64)
+        loss_std_curve = loss_matrix.std(dim=0).cpu().numpy().astype(np.float64)
+
+        plt.plot(
+            np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1),
+            loss_mean_curve,
+            label=label
+        )
+        plt.fill_between(
+            np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1),
+            loss_mean_curve - loss_std_curve,
+            loss_mean_curve + loss_std_curve,
+            alpha=0.3,
+            label=f"{label} interquartile range",
+        )
+
     plt.xlabel("Interpolation Step")
     plt.ylabel("Loss")
-    plt.title("Interpolation Loss Curve")
+    plt.title("Interpolation Loss Curves")
     plt.legend()
     plt.show()
 
     if save_path:
         plt.savefig(save_path)
-        print(f"Interpolation curve saved to {save_path}")
+        print(f"Interpolation curves saved to {save_path}")
+
+    plt.close()
+    
