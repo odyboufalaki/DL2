@@ -244,7 +244,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if not args.inr_path:
-        args.inr_path = "data/mnist-inrs/mnist_png_training_2_23089/checkpoints/model_final.pth"
+        args.inr_path = "data/mnist-inrs/mnist_png_training_2_23089/checkpoints/model_final.pth"  # 23721
 
     if not args.output_dir:
         args.output_dir = "data/mnist-inrs-orbit"

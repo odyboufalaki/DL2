@@ -1,5 +1,6 @@
 import json
 import os
+from src.scalegmn.models import ScaleGMN
 import torch
 import yaml
 import torch_geometric
@@ -11,6 +12,8 @@ from src.data import dataset
 from src.scalegmn.autoencoder import get_autoencoder
 from src.data.base_datasets import Batch
 from src.scalegmn.inr import INR
+from PIL import Image
+import torchvision.transforms as transforms
 
 
 @torch.no_grad()
@@ -48,7 +51,7 @@ def load_orbit_dataset_and_model(
     device: torch.device,
     ckpt_path: str = None,
     return_model: bool = True,
-) -> tuple[torch.nn.Module, torch_geometric.loader.DataLoader]:
+) -> tuple[ScaleGMN, torch_geometric.loader.DataLoader]:
     """
     Loads the orbit dataset and the pre-trained model.
 
@@ -82,7 +85,7 @@ def load_orbit_dataset_and_model(
         return_wb=True,
     )
     loader = torch_geometric.loader.DataLoader(
-        split_set, batch_size=conf["batch_size"], shuffle=False
+        split_set, batch_size=conf["batch_size"], shuffle=False,
     )
     print("Loaded", len(split_set), "samples in the dataset.")
 
@@ -100,6 +103,7 @@ def load_orbit_dataset_and_model(
         net.eval()
 
     return (net, loader) if return_model else loader
+
 
 def perturb_inr_batch(wb: Batch, perturbation: float) -> Batch:
     """Perturb the INR parameters in the batch by a small amount.
@@ -126,6 +130,7 @@ def perturb_inr_batch(wb: Batch, perturbation: float) -> Batch:
         label=wb.label,
     )
 
+
 def perturb_inr_all_batches(
     loader: torch_geometric.loader.DataLoader,
     perturbation: float,
@@ -147,6 +152,7 @@ def perturb_inr_all_batches(
         )
         perturbed_dataset.append(batch_perturbed)
     return perturbed_dataset
+
 
 def create_tmp_torch_geometric_loader(
     dataset: list[INR],
@@ -197,7 +203,7 @@ def create_tmp_torch_geometric_loader(
     
 def remove_tmp_torch_geometric_loader(
     tmp_dir: str
-):
+) -> None:
     print(f"Removing temporary directory {tmp_dir}...")
     # Remove the temporary directory
     for inr_id in range(len(os.listdir(tmp_dir))):
@@ -342,3 +348,26 @@ def interpolate_inrs_all_batches(
         )
 
     return interpolated_inrs
+
+
+def load_ground_truth_image(
+    image_path: str,
+    device: torch.device,
+) -> torch.Tensor:
+    """Load the ground truth image from the specified path.
+
+    Args:
+        image_path (str): The path to the image file.
+        device (torch.device): The device to load the image onto.
+
+    Returns:
+        torch.Tensor: The loaded image as a tensor.
+    """
+    # Open the image using PIL
+    image = Image.open(image_path).convert("L")
+
+    # Convert the image to a tensor
+    transform = transforms.ToTensor()
+    image_tensor = transform(image).to(device)
+
+    return image_tensor
