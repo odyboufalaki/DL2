@@ -1,67 +1,40 @@
+import argparse
+import gc
+import json
+import os
+import random
 from functools import partial
 from typing import Callable
 
-import yaml
-from src.scalegmn.models import ScaleGMN
-from src.data.base_datasets import Batch
 import torch
 from torch.nn.functional import mse_loss
-import argparse
-import os
 import torch_geometric
-import gc
-
-from src.utils.helpers import overwrite_conf, set_seed
-from src.scalegmn.inr import INR
-from analysis.utils import (
-    collect_latents,
-    instantiate_inr_all_batches,
-    load_orbit_dataset_and_model,
-    create_tmp_torch_geometric_loader,
-    remove_tmp_torch_geometric_loader,
-    perturb_inr_all_batches,
-    load_ground_truth_image,
-    interpolate_batch,
-    plot_interpolation_curves,
-)
-from src.scalegmn.autoencoder import create_batch_wb
-from src.phase_canonicalization.test_inr import test_inr
 from tqdm import tqdm
+import yaml
+
+from analysis.utils.create_orbit_dataset import generate_orbit_dataset
+from analysis.utils.utils import (
+    create_tmp_torch_geometric_loader,
+    instantiate_inr_all_batches,
+    interpolate_batch,
+    load_ground_truth_image,
+    load_orbit_dataset_and_model,
+    perturb_inr_all_batches,
+    plot_interpolation_curves,
+    remove_tmp_torch_geometric_loader,
+)
+from src.data.base_datasets import Batch
+from src.scalegmn.autoencoder import create_batch_wb
+from src.scalegmn.inr import INR
+from src.scalegmn.models import ScaleGMN
+from src.phase_canonicalization.test_inr import test_inr
+from src.utils.helpers import overwrite_conf, set_seed
 
 NUM_INTERPOLATION_SAMPLES = 10
-BATCH_SIZE = 35
+BATCH_SIZE = 64
 
-def get_args():
-    p = argparse.ArgumentParser()
-    p.add_argument(
-        "--conf",
-        type=str,
-        default="configs/mnist_rec/scalegmn_autoencoder.yml",
-        help="YAML config used during training",
-    )
-    p.add_argument(
-        "--dataset_path",
-        type=str,
-        default="data/mnist-inrs-orbit",
-    )
-    p.add_argument(
-        "--split_path",
-        type=str,
-        default="data/mnist-inrs-orbit/mnist_orbit_splits.json",
-    )
-    p.add_argument(
-        "--ckpt",
-        type=str,
-        default="models/mnist_rec_scale/scalegmn_autoencoder/scalegmn_autoencoder_mnist_rec.pt",
-        help="Path to model checkpoint (.pt or .ckpt)",
-    )
-    p.add_argument("--split", type=str, default="test")
-    p.add_argument("--outdir", type=str, default="latent/resources/orbit_analysis")
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--debug", action="store_true", help="Enable debug mode")
-    return p.parse_args()
-
-
+# ------------------------------
+# Experiment funtionality
 def inr_loss(
     ground_truth_image: torch.Tensor,
     reconstructed_image: torch.Tensor,
@@ -127,19 +100,12 @@ def compute_loss_matrix(
 
 
 @torch.no_grad()
-def main():
-    args = get_args()
-    torch.set_float32_matmul_precision("high")
-    conf = yaml.safe_load(open(args.conf))
-    conf = overwrite_conf(conf, {"debug": False})  # ensure standard run
-    conf["batch_size"] = BATCH_SIZE
-
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    os.makedirs(args.outdir, exist_ok=True)
-    set_seed(args.seed)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+def interpolation_experiment(
+    args: argparse.Namespace,
+    conf: dict, 
+    device: torch.device,
+    experiment_name: str = "interpolation_experiment",
+):
     net, loader = load_orbit_dataset_and_model(
         conf=conf,
         dataset_path=args.dataset_path,
@@ -167,15 +133,14 @@ def main():
     # Create torch gometric loader
     loader_perturbed = create_tmp_torch_geometric_loader(
         dataset=perturbed_dataset_inrs,
-        tmp_dir="analysis/tmp_dir",
+        tmp_dir=args.tmp_dir,
         conf=conf,
         device=device,
     )
 
     # Load ground truth image
-    mnist_ground_truth_img = "data/mnist/train/2/23089.png"  # TODO: generalize
     mnist_ground_truth_img = load_ground_truth_image(
-        mnist_ground_truth_img,
+        args.mnist_ground_truth_img,
         device=device,
     )
 
@@ -244,7 +209,7 @@ def main():
 
     # Delete tmp dir
     remove_tmp_torch_geometric_loader(
-        tmp_dir="analysis/tmp_dir",
+        tmp_dir=args.tmp_dir,
     )
 
     # Plot interpolation curve
@@ -253,8 +218,135 @@ def main():
             (loss_matrix_original, "Original"),
             (loss_matrix_reconstruction, "Reconstructed")
         ],
-        save_path="analysis/resources/interpolation/interpolation.png",
+        save_path=args.image_save_path,
     )
+
+
+def test_interpolation_experiment():
+    """
+    Run the interpolation experiment with the given arguments and configuration.
+    """
+    args = get_args()
+    conf = yaml.safe_load(open(args.conf))
+    conf = overwrite_conf(conf, {"debug": False})  # ensure standard run
+    conf["batch_size"] = BATCH_SIZE
+
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    os.makedirs(args.outdir, exist_ok=True)
+    set_seed(args.seed)
+    torch.set_float32_matmul_precision("high")
+
+    args.mnist_ground_truth_img = "data/mnist/train/2/23089.png"
+    args.save_path="analysis/resources/interpolation/interpolation.png"
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    interpolation_experiment(
+        args=args,
+        conf=conf,
+        device=device,
+        experiment_name="interpolation_experiment",
+    )
+
+
+# ------------------------------
+# Main function
+def get_args():
+    p = argparse.ArgumentParser()
+    p.add_argument(
+        "--conf",
+        type=str,
+        default="configs/mnist_rec/scalegmn_autoencoder.yml",
+        help="YAML config used during training",
+    )
+    p.add_argument(
+        "--dataset_path",
+        type=str,
+        default="data/mnist-inrs-orbit",
+    )
+    p.add_argument(
+        "--split_path",
+        type=str,
+        default="data/mnist-inrs-orbit/mnist_orbit_splits.json",
+    )
+    p.add_argument(
+        "--ckpt",
+        type=str,
+        default="models/mnist_rec_scale/scalegmn_autoencoder/scalegmn_autoencoder_mnist_rec.pt",
+        help="Path to model checkpoint (.pt or .ckpt)",
+    )
+    p.add_argument(
+        "--tmp_dir",
+        type=str,
+        default="analysis/tmp_dir",
+    )
+    p.add_argument(
+        "--dataset_size",
+        type=int,
+        default=2**12,
+        help="Number of augmented INRs to generate",
+    )
+    p.add_argument("--split", type=str, default="test")
+    p.add_argument("--outdir", type=str, default="latent/resources/orbit_analysis")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--debug", action="store_true", help="Enable debug mode")
+    return p.parse_args()
+
+
+def main():
+    """
+    Run the main function with different orbits from different INRs.
+    This function creates a new dataset with different orbits and runs the interpolation experiment.
+    """
+    args = get_args()
+    conf = yaml.safe_load(open(args.conf))
+    conf = overwrite_conf(conf, {"debug": False})  # ensure standard run
+    conf["batch_size"] = BATCH_SIZE
+
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    os.makedirs(args.outdir, exist_ok=True)
+    set_seed(args.seed)
+    torch.set_float32_matmul_precision("high")
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+   
+    num_runs = 5
+
+    # Sample random INRs from the test set
+    splits = json.load(open(conf["data"]["split_path"]))
+    sampled_inr_paths = random.sample(splits["test"]["path"], num_runs)
+   
+    for experiment_id, inr_path in enumerate(sampled_inr_paths):
+        print("-" * 50)
+        print(f"Running experiment {experiment_id + 1}/{num_runs}...")
+        ## Create the orbit dataset of the INR
+        generate_orbit_dataset(
+            output_dir=args.tmp_dir + "/orbit",
+            inr_path=inr_path,
+            device=device,
+        )
+
+        # Directory for perturbed orbit dataset
+        args.tmp_dir = args.tmp_dir + "/perturbed_orbit"
+
+
+        ## Run orbit interpolation experiment
+        inr_label = inr_path.split("/")[-3].split("_")[-2]
+        inr_id = inr_path[0].split("/")[-3].split("_")[-1]
+        possible_pahts = [f"data/mnist/test/{inr_label}/{inr_id}.png", f"data/mnist/train/{inr_label}/{inr_id}.png"]
+
+        # The image is either in the train or test set
+        for path in possible_pahts:
+            if os.path.exists(path):
+                args.mnist_ground_truth_img = path
+            break
+        else:
+            raise FileNotFoundError(f"None of the paths exist: {possible_pahts}")
+
+        # Sample INR to create orbit
+        args.save_path = f"analysis/resources/interpolation/interpolation_expid={experiment_id}_inrlabel={inr_label}.png"
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 

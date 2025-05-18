@@ -53,16 +53,26 @@ def get_args():
 # ------------------------------
 # Group transformation functions
 def _row_sign_flip(
-    w: Tensor, b: Tensor, w_next: Tensor
-) -> Tuple[Tensor, Tensor, Tensor]:
+    w: torch.Tensor, b: torch.Tensor, w_next: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Default ⇄ sign-flip transformation that keeps the MLP function unchanged.
-    Works on (out, in) → (out) → (next_out, out) tensors.
+    Randomly flips the sign of the rows of the weight matrix `w` and the
+    corresponding biases in `b`. The next layer's weight matrix `w_next` is
+    also adjusted accordingly.
+
+    Parameters:
+        w (Tensor): The weight matrix of the current layer.
+        b (Tensor): The bias vector of the current layer.
+        w_next (Tensor): The weight matrix of the next layer.
+
+    Returns:
+        Tuple[Tensor, Tensor, Tensor, Tensor]: The transformed weight matrix,
+        bias vector, and next layer's weight matrix, along with the flip signs.
     """
     flips = torch.randint(0, 2, (w.size(0),), device=w.device, dtype=w.dtype) * 2 - 1
-    w = flips.view(-1, 1) * w
+    w = torch.diag(flips) @ w
     b = flips * b
-    w_next = w_next * flips.view(1, -1)
+    w_next = w_next @ torch.diag(flips)
     return w, b, w_next, flips
 
 
@@ -108,7 +118,40 @@ def _transform_layer(
     return new_sd, flips
 
 
-def test_augmented_dataset(dataset, device, tolerance=1e-5):
+def transform_inr(
+    sd: StateDict,
+    layers_to_flip: List[int],
+    transform: Transform = _row_sign_flip,
+    prefix: str = "seq.",
+) -> Tuple[StateDict, List[torch.Tensor]]:
+    """
+    Apply `transform` to the specified layers inside a *Sequential*-style
+    state-dict and return the mutated copy.
+
+    Parameters
+    ----------
+    sd : StateDict
+        The state-dict (is shallow-copied for safety).
+    layers_to_flip : List[int]
+        List of 0-based indices of the layers to be transformed.
+    transform : Transform
+        Function to apply to the weights and biases of the layers.
+    prefix : str
+        Key prefix used in the state-dict (default "seq.").
+
+    Returns
+    -------
+    Tuple[StateDict, List[Tensor]]
+        The transformed state-dict and a list of flip tensors for each layer.
+    """
+    flips = []
+    for layer_idx in layers_to_flip:
+        sd, flip = _transform_layer(sd, layer_idx, transform, prefix)
+        flips.append(flip)
+    return sd, flips
+
+
+def test_orbit_dataset(dataset, device, tolerance=1e-5):
     """
     Evaluate the INRs in a 28x28 grid and assert that they are all within a
     specified distance tolerance.
@@ -152,27 +195,24 @@ def test_augmented_dataset(dataset, device, tolerance=1e-5):
             f"Outputs differ by more than {tolerance} at some points in the grid."
         )
 
-def generate_augmented_dataset(
+
+def generate_orbit_dataset(
     output_dir: str,
     inr_path: str,
     device: torch.device,
-) -> List[Batch]:
+    dataset_size: int = 2**12,
+) -> None:
     """
-    Augment the dataset by applying random group transformations on the
-    weights and biases of the input INR. The transformations are applied to
+    Compute the loss matrix for the given dataset using the INR model.
 
-    Parameters
-    ----------
-    device : torch.device
-        The device (CPU or GPU) on which the dataset will be processed.
-    inr_path : str
-        The path to the INR model file that will be augmented.
+    Args:
+        output_dir (str): Directory to save the augmented dataset.
+        inr_path (str): Path to the original INR model.
+        device (torch.device): Device to use for computation (CPU or GPU).
+        dataset_size (int): Number of augmented INRs to generate.
 
-    Returns
-    List[Batch]
-        The augmented dataset as a Batch object, containing the transformed
-        weights and biases of the model.
-
+    Returns:
+        None
     """
     # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"  # ensure deterministic behavior
 
@@ -184,23 +224,27 @@ def generate_augmented_dataset(
 
     inr_label = inr_path.split("/")[-3].split("_")[-2]
 
-    past_random_history = []
+    flip_history = []
     dataset = []
-    for inr_id in tqdm(range(args.dataset_size), desc="Generating augmented dataset"):
-        layer_to_flip = torch.randint(0, len(INR_LAYER_ARCHITECTURE) - 2, (1,)).item()  # pick a random layer
-        sd, flips = _transform_layer(
+    for inr_id in tqdm(range(dataset_size), desc="Generating augmented dataset"):
+        layers_to_flip = list(range(0, INR_NUMBER_LAYERS - 1))
+        sd, flips = transform_inr(
             sd=original_sd,
-            layer_idx=layer_to_flip,
+            layers_to_flip=layers_to_flip,
         )  # apply the transformation
-        iteration_flips = (layer_to_flip, flips)
+        iteration_flips = flips  # flips is a tuple of flip tensors, one for each layer
         # Do not repeat the same transformation
         if any(
-            layer == iteration_flips[0] and torch.equal(flips, iteration_flips[1])
-            for layer, flips in past_random_history
+            torch.equal(history_layer_flip, iteration_layer_flip)
+            for history_flips in flip_history
+            for history_layer_flip, iteration_layer_flip in zip(history_flips, iteration_flips)
         ):
+            print(
+                f"Skipping INR {inr_id} because it has the same transformation as a previous one."
+            )
             continue
 
-        past_random_history.append(iteration_flips)
+        flip_history.append(iteration_flips)
 
         inr = INR()
         inr = inr.to(device)
@@ -209,15 +253,15 @@ def generate_augmented_dataset(
 
     # Test the augmented dataset
     # If it fails the test, it will raise an AssertionError and stop the execution
-    test_augmented_dataset(dataset, device, tolerance=1e-5)
+    test_orbit_dataset(dataset, device, tolerance=1e-5)
 
     splits_json = dict()
-    splits_json["test"] = {"path": [], "label": args.dataset_size * [inr_label]}
+    splits_json["test"] = {"path": [], "label": dataset_size * [inr_label]}
     for inr_id, inr in enumerate(dataset):
         # Save the transformed INR to the output directory
         output_path_dir = os.path.join(
             output_dir,
-            args.inr_path.split("/")[2] + "_augmented_" + str(inr_id),
+            inr_path.split("/")[2] + "_augmented_" + str(inr_id),
             "checkpoints",
         )
         if not os.path.exists(output_path_dir):
@@ -235,7 +279,7 @@ def generate_augmented_dataset(
     with open(os.path.join(output_dir, "mnist_orbit_splits.json"), "w") as f:
         json.dump(splits_json, f, indent=4)
 
-    print(f"Saved {args.dataset_size} orbit samples to {output_dir}.")
+    print(f"Saved {dataset_size} orbit samples to {output_dir}.")
 
 
 if __name__ == "__main__":
@@ -244,7 +288,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if not args.inr_path:
-        args.inr_path = "data/mnist-inrs/mnist_png_training_2_23089/checkpoints/model_final.pth"  # 23721
+        args.inr_path = "data/mnist-inrs/mnist_png_training_2_23089/checkpoints/model_final.pth"
 
     if not args.output_dir:
         args.output_dir = "data/mnist-inrs-orbit"
@@ -252,7 +296,7 @@ if __name__ == "__main__":
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    batches = generate_augmented_dataset(
+    batches = generate_orbit_dataset(
         output_dir=args.output_dir,
         inr_path=args.inr_path,
         device=device,
