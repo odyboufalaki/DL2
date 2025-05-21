@@ -21,6 +21,7 @@ from src.data import dataset
 from src.scalegmn.inr import INR
 from src.data.base_datasets import Batch
 from tqdm import tqdm
+import shutil
 
 
 # Variables
@@ -181,14 +182,11 @@ def test_orbit_dataset(dataset, device, tolerance=1e-5):
         outputs.append(inr(grid))
         # Subtract the outputs of each INR from every other INR
 
-    print("Statistics of dataset:")
-    print("-" * 40)
-
     # Compute statistics: mean and standard deviation
     all_outputs = torch.stack(outputs)
     std_output = torch.max(torch.std(all_outputs, dim=0))
 
-    print(f"Standard deviation of outputs: {std_output}")
+    print(f"Sanity check for obit dataset. std = {std_output}")
 
     if torch.max(std_output) > tolerance:
         raise AssertionError(
@@ -234,15 +232,15 @@ def generate_orbit_dataset(
         )  # apply the transformation
         iteration_flips = flips  # flips is a tuple of flip tensors, one for each layer
         # Do not repeat the same transformation
-        if any(
-            torch.equal(history_layer_flip, iteration_layer_flip)
-            for history_flips in flip_history
-            for history_layer_flip, iteration_layer_flip in zip(history_flips, iteration_flips)
-        ):
-            print(
-                f"Skipping INR {inr_id} because it has the same transformation as a previous one."
-            )
-            continue
+        # if any(
+        #     torch.equal(history_layer_flip, iteration_layer_flip)
+        #     for history_flips in flip_history
+        #     for history_layer_flip, iteration_layer_flip in zip(history_flips, iteration_flips)
+        # ):
+        #     print(
+        #         f"Skipping INR {inr_id} because it has the same transformation as a previous one."
+        #     )
+        #     continue
 
         flip_history.append(iteration_flips)
 
@@ -281,6 +279,22 @@ def generate_orbit_dataset(
 
     print(f"Saved {dataset_size} orbit samples to {output_dir}.")
 
+
+def delete_orbit_dataset(output_dir: str) -> None:
+    """
+    Delete the orbit dataset directory.
+
+    Args:
+        output_dir (str): Directory to delete.
+
+    Returns:
+        None
+    """
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+        print(f"Deleted the directory: {output_dir}")
+    else:
+        print(f"The directory {output_dir} does not exist.")
 
 if __name__ == "__main__":
     args = get_args()

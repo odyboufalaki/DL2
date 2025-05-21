@@ -387,21 +387,31 @@ def plot_interpolation_curves(
     """
     plt.ylim(0, max([loss_matrix.mean(dim=0).max().item() for loss_matrix, _ in loss_matrices]) * 5)
 
-    for loss_matrix, label in loss_matrices:
+    colors = plt.cm.viridis(np.linspace(0, 1, len(loss_matrices)))
+    for color, (loss_matrix, label) in zip(colors, loss_matrices):
         loss_mean_curve = loss_matrix.mean(dim=0).cpu().numpy().astype(np.float64)
-        loss_std_curve = loss_matrix.std(dim=0).cpu().numpy().astype(np.float64)
+        loss_min_curve = loss_matrix.min(dim=0).values.cpu().numpy().astype(np.float64)
+        loss_max_curve = loss_matrix.max(dim=0).values.cpu().numpy().astype(np.float64)
 
         plt.plot(
             np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1),
             loss_mean_curve,
-            label=label
+            label=label,
+            color=color,
+        )
+        plt.scatter(
+            np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1),
+            loss_mean_curve,
+            marker='^',
+            color=color,
         )
         plt.fill_between(
             np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1),
-            loss_mean_curve - loss_std_curve,
-            loss_mean_curve + loss_std_curve,
+            loss_min_curve,
+            loss_max_curve,
             alpha=0.3,
-            label=f"{label} interquartile range",
+            label=f"{label} range (min-max)",
+            color=color,
         )
 
     plt.xlabel("Interpolation Step")

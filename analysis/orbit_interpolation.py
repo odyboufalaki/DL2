@@ -12,7 +12,10 @@ import torch_geometric
 from tqdm import tqdm
 import yaml
 
-from analysis.utils.create_orbit_dataset import generate_orbit_dataset
+from analysis.utils.create_orbit_dataset import (
+    generate_orbit_dataset,
+    delete_orbit_dataset,
+)
 from analysis.utils.utils import (
     create_tmp_torch_geometric_loader,
     instantiate_inr_all_batches,
@@ -30,7 +33,7 @@ from src.scalegmn.models import ScaleGMN
 from src.phase_canonicalization.test_inr import test_inr
 from src.utils.helpers import overwrite_conf, set_seed
 
-NUM_INTERPOLATION_SAMPLES = 10
+NUM_INTERPOLATION_SAMPLES = 40
 BATCH_SIZE = 64
 
 # ------------------------------
@@ -104,7 +107,6 @@ def interpolation_experiment(
     args: argparse.Namespace,
     conf: dict, 
     device: torch.device,
-    experiment_name: str = "interpolation_experiment",
 ):
     net, loader = load_orbit_dataset_and_model(
         conf=conf,
@@ -117,7 +119,7 @@ def interpolation_experiment(
     perturbed_dataset_batches: list[Batch]
     perturbed_dataset_batches = perturb_inr_all_batches(
         loader=loader,
-        perturbation=5 * 1e-3,
+        perturbation=args.perturbation,
     )
 
     perturbed_dataset_inrs: list[INR]
@@ -126,9 +128,6 @@ def interpolation_experiment(
         device=device,
     )
     perturbed_dataset_inrs = perturbed_dataset_inrs[1:] + [perturbed_dataset_inrs[0]]
-
-    if args.debug:
-        perturbed_dataset_inrs = perturbed_dataset_inrs[:10]
 
     # Create torch gometric loader
     loader_perturbed = create_tmp_torch_geometric_loader(
@@ -212,14 +211,16 @@ def interpolation_experiment(
         tmp_dir=args.tmp_dir,
     )
 
-    # Plot interpolation curve
-    plot_interpolation_curves(
-        loss_matrices=[
-            (loss_matrix_original, "Original"),
-            (loss_matrix_reconstruction, "Reconstructed")
-        ],
-        save_path=args.image_save_path,
-    )
+    return loss_matrix_original, loss_matrix_reconstruction
+
+    # # Plot interpolation curve
+    # plot_interpolation_curves(
+    #     loss_matrices=[
+    #         (loss_matrix_original, "Original"),
+    #         (loss_matrix_reconstruction, "Reconstructed")
+    #     ],
+    #     save_path=args.image_save_path,
+    # )
 
 
 def test_interpolation_experiment():
@@ -261,12 +262,12 @@ def get_args():
     p.add_argument(
         "--dataset_path",
         type=str,
-        default="data/mnist-inrs-orbit",
+        default="analysis/tmp_dir/orbit",
     )
     p.add_argument(
         "--split_path",
         type=str,
-        default="data/mnist-inrs-orbit/mnist_orbit_splits.json",
+        default="analysis/tmp_dir/orbit/mnist_orbit_splits.json",
     )
     p.add_argument(
         "--ckpt",
@@ -286,12 +287,24 @@ def get_args():
         help="Number of augmented INRs to generate",
     )
     p.add_argument("--split", type=str, default="test")
-    p.add_argument("--outdir", type=str, default="latent/resources/orbit_analysis")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--debug", action="store_true", help="Enable debug mode")
+    p.add_argument(
+        "--num_runs",
+        type=int,
+        default=100,
+        help="Number of runs to perform",
+    )
+    p.add_argument(
+        "--perturbation",
+        type=float,
+        default=0.005,
+        help="Perturbation to apply to the INR weights",
+    )
     return p.parse_args()
 
 
+loss_matrix_original_list = []
+loss_matrix_reconstruction_list = []
 def main():
     """
     Run the main function with different orbits from different INRs.
@@ -303,35 +316,41 @@ def main():
     conf["batch_size"] = BATCH_SIZE
 
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    os.makedirs(args.outdir, exist_ok=True)
     set_seed(args.seed)
     torch.set_float32_matmul_precision("high")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
    
-    num_runs = 5
+    num_runs = args.num_runs
 
     # Sample random INRs from the test set
     splits = json.load(open(conf["data"]["split_path"]))
     sampled_inr_paths = random.sample(splits["test"]["path"], num_runs)
    
+    orbit_dataset_path = args.tmp_dir + "/orbit"
+    args.tmp_dir = args.tmp_dir + "/perturbed_orbit"  # Passed as argument to interpolation_experiment
+    
+    loss_matrix_original_list = []
+    loss_matrix_reconstruction_list = []
+
     for experiment_id, inr_path in enumerate(sampled_inr_paths):
+        conf = yaml.safe_load(open(args.conf))
+        conf = overwrite_conf(conf, {"debug": False})  # ensure standard run
+        conf["batch_size"] = BATCH_SIZE
+        
         print("-" * 50)
         print(f"Running experiment {experiment_id + 1}/{num_runs}...")
         ## Create the orbit dataset of the INR
         generate_orbit_dataset(
-            output_dir=args.tmp_dir + "/orbit",
+            output_dir=orbit_dataset_path,
             inr_path=inr_path,
             device=device,
+            dataset_size=args.dataset_size,
         )
-
-        # Directory for perturbed orbit dataset
-        args.tmp_dir = args.tmp_dir + "/perturbed_orbit"
-
 
         ## Run orbit interpolation experiment
         inr_label = inr_path.split("/")[-3].split("_")[-2]
-        inr_id = inr_path[0].split("/")[-3].split("_")[-1]
+        inr_id = inr_path.split("/")[-3].split("_")[-1]
         possible_pahts = [f"data/mnist/test/{inr_label}/{inr_id}.png", f"data/mnist/train/{inr_label}/{inr_id}.png"]
 
         # The image is either in the train or test set
@@ -343,11 +362,36 @@ def main():
             raise FileNotFoundError(f"None of the paths exist: {possible_pahts}")
 
         # Sample INR to create orbit
-        args.save_path = f"analysis/resources/interpolation/interpolation_expid={experiment_id}_inrlabel={inr_label}.png"
+        args.image_save_path = f"analysis/resources/interpolation/interpolation_expid={experiment_id}_inrlabel={inr_label}.png"
+
+        loss_matrix_original, loss_matrix_reconstruction = interpolation_experiment(
+            args=args,
+            conf=conf, 
+            device=device,
+        )
+
+        # Clear unused variables and free memory
+        delete_orbit_dataset(orbit_dataset_path)
+
+        loss_matrix_original_list.append(loss_matrix_original)
+        loss_matrix_reconstruction_list.append(loss_matrix_reconstruction)
 
         gc.collect()
         torch.cuda.empty_cache()
+    
+    # Concatenate the matrices after the loop
+    loss_matrix_original_list = torch.cat(loss_matrix_original_list, dim=0)
+    loss_matrix_reconstruction_list = torch.cat(loss_matrix_reconstruction_list, dim=0)
 
+    plot_interpolation_curves(
+        loss_matrices=[
+            (loss_matrix_original_list, "Original"),
+            (loss_matrix_reconstruction_list, "Reconstructed")
+        ],
+        save_path=args.image_save_path,
+    )
+    
+    
 
 
 if __name__ == "__main__":
