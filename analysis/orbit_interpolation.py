@@ -303,8 +303,6 @@ def get_args():
     return p.parse_args()
 
 
-loss_matrix_original_list = []
-loss_matrix_reconstruction_list = []
 def main():
     """
     Run the main function with different orbits from different INRs.
@@ -361,8 +359,8 @@ def main():
         else:
             raise FileNotFoundError(f"None of the paths exist: {possible_pahts}")
 
-        # Sample INR to create orbit
-        args.image_save_path = f"analysis/resources/interpolation/interpolation_expid={experiment_id}_inrlabel={inr_label}.png"
+        # # Sample INR to create orbit
+        # args.image_save_path = f"analysis/resources/interpolation/interpolation_expid={experiment_id}_inrlabel={inr_label}.png"
 
         loss_matrix_original, loss_matrix_reconstruction = interpolation_experiment(
             args=args,
@@ -388,7 +386,8 @@ def main():
             (loss_matrix_original_list, "Original"),
             (loss_matrix_reconstruction_list, "Reconstructed")
         ],
-        save_path=args.image_save_path,
+        save_path=f"analysis/resources/interpolation/interpolation_numruns={num_runs}_perturbation={args.perturbation}.png"
+,
     )
     
     

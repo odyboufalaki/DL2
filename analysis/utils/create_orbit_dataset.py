@@ -53,34 +53,52 @@ def get_args():
 
 # ------------------------------
 # Group transformation functions
-def _row_sign_flip(
-    w: torch.Tensor, b: torch.Tensor, w_next: torch.Tensor
+def transform_weights_biases(
+    w: torch.Tensor, b: torch.Tensor, w_next: torch.Tensor,
+    flip_signs: bool = True,
+    permute: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Randomly flips the sign of the rows of the weight matrix `w` and the
-    corresponding biases in `b`. The next layer's weight matrix `w_next` is
-    also adjusted accordingly.
+    Applies random transformations to the weight matrix `w` and the corresponding
+    biases in `b`. The transformations include flipping the signs of rows and/or
+    permuting the rows. The next layer's weight matrix `w_next` is adjusted to
+    maintain consistency.
 
     Parameters:
-        w (Tensor): The weight matrix of the current layer.
-        b (Tensor): The bias vector of the current layer.
-        w_next (Tensor): The weight matrix of the next layer.
+        w (Tensor): Weight matrix of the current layer (shape: [out_features, in_features]).
+        b (Tensor): Bias vector of the current layer (shape: [out_features]).
+        w_next (Tensor): Weight matrix of the next layer (shape: [next_out_features, out_features]).
+        flip_signs (bool, optional): If True, randomly flips the signs of rows in `w` and `b`.
+                                     Default is True.
+        permute (bool, optional): If True, randomly permutes the rows of `w` and `b`.
+                                  Default is True.
 
     Returns:
-        Tuple[Tensor, Tensor, Tensor, Tensor]: The transformed weight matrix,
-        bias vector, and next layer's weight matrix, along with the flip signs.
+        Tuple[Tensor, Tensor, Tensor, Tensor]: A tuple containing:
+            - Transformed weight matrix `w`.
+            - Transformed bias vector `b`.
+            - Adjusted weight matrix `w_next` for the next layer.
+            - Transformation matrix applied to `w` and `b`.
     """
-    flips = torch.randint(0, 2, (w.size(0),), device=w.device, dtype=w.dtype) * 2 - 1
-    w = torch.diag(flips) @ w
-    b = flips * b
-    w_next = w_next @ torch.diag(flips)
-    return w, b, w_next, flips
+    assert flip_signs or permute, "At least one of flip_signs or permute_positions must be True"
+    transformation = torch.eye(w.size(0), device=w.device, dtype=w.dtype)
+    if flip_signs:
+        transformation = torch.randint(0, 2, (w.size(0),), device=w.device, dtype=w.dtype) * 2 - 1
+        transformation = torch.diag(transformation)
+    if permute:
+        perm = torch.randperm(transformation.size(0), device=w.device)
+        transformation = transformation[perm]
+
+    w = transformation @ w
+    b = transformation @ b
+    w_next = w_next @ transformation.T
+    return w, b, w_next, transformation
 
 
-def _transform_layer(
+def transform_layer(
     sd: StateDict,
     layer_idx: int,
-    transform: Transform = _row_sign_flip,
+    transform: Transform = transform_weights_biases,
     prefix: str = "seq.",
 ) -> StateDict:
     """
@@ -122,7 +140,7 @@ def _transform_layer(
 def transform_inr(
     sd: StateDict,
     layers_to_flip: List[int],
-    transform: Transform = _row_sign_flip,
+    transform: Transform = transform_weights_biases,
     prefix: str = "seq.",
 ) -> Tuple[StateDict, List[torch.Tensor]]:
     """
@@ -147,7 +165,7 @@ def transform_inr(
     """
     flips = []
     for layer_idx in layers_to_flip:
-        sd, flip = _transform_layer(sd, layer_idx, transform, prefix)
+        sd, flip = transform_layer(sd, layer_idx, transform, prefix)
         flips.append(flip)
     return sd, flips
 
@@ -297,6 +315,7 @@ def delete_orbit_dataset(output_dir: str) -> None:
         print(f"The directory {output_dir} does not exist.")
 
 if __name__ == "__main__":
+    torch.set_float32_matmul_precision("high")
     args = get_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
