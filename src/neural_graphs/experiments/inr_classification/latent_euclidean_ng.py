@@ -33,8 +33,8 @@ import sys
 def get_args():
     p = argparse.ArgumentParser(add_help=False)   # note: disable default help so “-h” still works
     p.add_argument("--ckpt",    type=str, default="outputs/2025-05-11/16-21-51/5gzpb5lt/best_val.ckpt")
-    p.add_argument("--split",   type=str, default="test", choices=["train","val","test"])
-    p.add_argument("--outdir",  type=str, default="latent/resources/interpolation")
+    p.add_argument("--split",   type=str, default="orbit", choices=["train","val","test", "orbit"])
+    p.add_argument("--outdir",  type=str, default="analysis/resources/interpolation")
     p.add_argument("--seed",    type=int, default=0)
     p.add_argument("--pca_dim", type=int, default=None)
     args, unknown = p.parse_known_args()
@@ -116,6 +116,8 @@ def latents(cfg, hydra_cfg):
         split_set = hydra.utils.instantiate(cfg.data.val)
     elif cfg.latent_analysis.split == "test":
         split_set = hydra.utils.instantiate(cfg.data.test)
+    elif cfg.latent_analysis.split == "orbit":
+        split_set = hydra.utils.instantiate(cfg.data.orbit)
     #plot_epoch_set = hydra.utils.instantiate(cfg.data.plot_epoch)
     
 
@@ -172,7 +174,11 @@ def latents(cfg, hydra_cfg):
   
 
     # ---------------- Model ------------------------------
-    model.load_state_dict(torch.load(cfg.latent_analysis.ckpt_path, map_location=device), strict=False)
+    checkpoint = torch.load(cfg.latent_analysis.ckpt_path, map_location=device)
+    # Extract the model's state_dict from the checkpoint
+    model_state_dict = checkpoint['model']
+    # Now load the extracted state_dict into your network
+    model.load_state_dict(model_state_dict)
     model.eval()
 
     # ---------------- Collect latents --------------------

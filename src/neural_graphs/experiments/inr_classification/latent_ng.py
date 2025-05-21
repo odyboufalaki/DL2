@@ -197,7 +197,11 @@ def latents(cfg, hydra_cfg):
   
 
     # ---------------- Model ------------------------------
-    model.load_state_dict(torch.load(cfg.latent_analysis.ckpt_path, map_location=device), strict=False)
+    checkpoint = torch.load(cfg.latent_analysis.ckpt_path, map_location=device)
+    # Extract the model's state_dict from the checkpoint
+    model_state_dict = checkpoint['model']
+    # Now load the extracted state_dict into your network
+    model.load_state_dict(model_state_dict)
     model.eval()
 
     # ---------------- Collect latents --------------------
