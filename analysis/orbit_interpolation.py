@@ -26,15 +26,57 @@ from analysis.utils.utils import (
     plot_interpolation_curves,
     remove_tmp_torch_geometric_loader,
 )
+from analysis.linear_assignment import match_weights_biases_batch
 from src.data.base_datasets import Batch
 from src.scalegmn.autoencoder import create_batch_wb
 from src.scalegmn.inr import INR
 from src.scalegmn.models import ScaleGMN
 from src.phase_canonicalization.test_inr import test_inr
 from src.utils.helpers import overwrite_conf, set_seed
+import pathlib
 
 NUM_INTERPOLATION_SAMPLES = 40
 BATCH_SIZE = 64
+
+def convert_and_prepare_weights(rebased_weights, rebased_biases, device=None):
+    """
+    Convert rebased weights and biases to tensors and prepare them for _wb_to_tuple.
+    
+    Args:
+        rebased_weights: List of lists of numpy arrays (weights for each layer of each INR)
+        rebased_biases: List of lists of numpy arrays (biases for each layer of each INR)
+        device: Optional torch.device to move tensors to
+        
+    Returns:
+        Tuple of (weights, biases) in the format expected by _wb_to_tuple
+    """
+    # Convert to tensors
+    weights_tensors = [
+        [torch.from_numpy(w).to(device).float() if device else torch.from_numpy(w).float() 
+         for w in inr_weights]
+        for inr_weights in rebased_weights
+    ]
+    
+    biases_tensors = [
+        [torch.from_numpy(b).to(device).float() if device else torch.from_numpy(b).float() 
+         for b in inr_biases]
+        for inr_biases in rebased_biases
+    ]
+    
+    # Reshape for _wb_to_tuple
+    # We need to stack the weights and biases for each layer across the batch
+    weights = [
+        torch.stack([w[i] for w in weights_tensors]).unsqueeze(-1).permute(0,2,1,3)  # Add channel dimension
+        for i in range(len(weights_tensors[0]))  # For each layer
+    ]
+    
+    biases = [
+        torch.stack([b[i] for b in biases_tensors]).unsqueeze(-1)  # Add channel dimension
+        for i in range(len(biases_tensors[0]))  # For each layer
+    ]
+    
+    return weights, biases
+
 
 # ------------------------------
 # Experiment funtionality
@@ -175,13 +217,11 @@ def interpolation_experiment(
         w_reconstructed_perturbed, b_reconstructed_perturbed = create_batch_wb(
             net(batch_perturbed),
         )
-
         wb_reconstructed_original = Batch(
             weights=w_reconstructed_original,
             biases=b_reconstructed_original,
             label=wb_original.label,
         )
-
         wb_reconstructed_perturbed = Batch(
             weights=w_reconstructed_perturbed,
             biases=b_reconstructed_perturbed,
@@ -249,6 +289,118 @@ def test_interpolation_experiment():
     )
 
 
+def linear_assignment_experiment(
+    args: argparse.Namespace,
+    conf: dict, 
+    device: torch.device,
+    matching_type: str,
+):
+    """
+    Run the linear assignment experiment with the given arguments and configuration.
+    """
+    net, loader = load_orbit_dataset_and_model(
+        conf=conf,
+        dataset_path=args.dataset_path,
+        split_path=args.split_path,
+        ckpt_path=args.ckpt,
+        device=device,
+    )
+
+    perturbed_dataset_batches: list[Batch]
+    perturbed_dataset_batches = perturb_inr_all_batches(
+        loader=loader,
+        perturbation=args.perturbation,
+    )
+
+    perturbed_dataset_inrs: list[INR]
+    perturbed_dataset_inrs = instantiate_inr_all_batches(
+        all_batches=perturbed_dataset_batches,
+        device=device,
+    )
+    perturbed_dataset_inrs = perturbed_dataset_inrs[1:] + [perturbed_dataset_inrs[0]]
+
+    # Create torch gometric loader
+    loader_perturbed = create_tmp_torch_geometric_loader(
+        dataset=perturbed_dataset_inrs,
+        tmp_dir=args.tmp_dir,
+        conf=conf,
+        device=device,
+    )
+
+    # Load ground truth image
+    mnist_ground_truth_img = load_ground_truth_image(
+        args.mnist_ground_truth_img,
+        device=device,
+    )
+
+    loss_matrix_original, loss_matrix_reconstruction = [], []
+    for (batch_original, wb_original), (batch_perturbed, wb_perturbed) in tqdm(
+        zip(loader, loader_perturbed), desc="Processing batches", total=len(loader)
+    ):
+        batch_original = batch_original.to(device)
+        batch_perturbed = batch_perturbed.to(device)
+        wb_original = wb_original.to(device)
+        wb_perturbed = wb_perturbed.to(device)
+    
+        interpolated_batches: list[Batch] 
+        interpolated_batches = interpolate_batch(
+            wb_original,
+            wb_perturbed,
+            num_samples=NUM_INTERPOLATION_SAMPLES,
+        )
+
+        loss_matrix = compute_loss_matrix(
+            interpolated_batches=interpolated_batches,
+            mnist_ground_truth_img=mnist_ground_truth_img,
+            device=device,
+            reconstructed=True,
+        )
+        loss_matrix_original.append(loss_matrix)
+        
+     
+        rebased_weights, rebased_biases = match_weights_biases_batch(
+            weights_A_batch=wb_original.weights,
+            weights_B_batch=wb_perturbed.weights,
+            biases_A_batch=wb_original.biases,
+            biases_B_batch=wb_perturbed.biases,
+            matching_type=matching_type,
+        )
+    
+        rebased_weights, rebased_biases = convert_and_prepare_weights(rebased_weights, rebased_biases, device=device)
+        
+        # rebased weights and biases
+        wb_rebased = Batch(
+            weights=rebased_weights,
+            biases=rebased_biases,
+            label=wb_perturbed.label,
+        )
+        
+        interpolated_batches_transformation: list[Batch]  # [NUM_INTERPOLATION_SAMPLES, Batch]
+        interpolated_batches_transformation = interpolate_batch(
+            wb_original,
+            wb_rebased,
+            num_samples=NUM_INTERPOLATION_SAMPLES,
+        )
+
+        # loss_matrix_reconstruction [BATCH_SIZE, NUM_INTERPOLATION_SAMPLES]
+        loss_matrix = compute_loss_matrix(
+            interpolated_batches=interpolated_batches_transformation,
+            mnist_ground_truth_img=mnist_ground_truth_img,
+            device=device,
+            reconstructed=True,
+        )
+        loss_matrix_reconstruction.append(loss_matrix)
+
+    loss_matrix_original = torch.cat(loss_matrix_original, dim=0)
+    loss_matrix_reconstruction = torch.cat(loss_matrix_reconstruction, dim=0)
+
+    # Delete tmp dir
+    remove_tmp_torch_geometric_loader(
+        tmp_dir=args.tmp_dir,
+    )
+
+    return loss_matrix_original, loss_matrix_reconstruction
+
 # ------------------------------
 # Main function
 def get_args():
@@ -283,7 +435,7 @@ def get_args():
     p.add_argument(
         "--dataset_size",
         type=int,
-        default=2**12,
+        default=512,
         help="Number of augmented INRs to generate",
     )
     p.add_argument("--split", type=str, default="test")
@@ -291,14 +443,33 @@ def get_args():
     p.add_argument(
         "--num_runs",
         type=int,
-        default=100,
+        default=10,
         help="Number of runs to perform",
     )
     p.add_argument(
         "--perturbation",
         type=float,
-        default=0.005,
+        default=0,
         help="Perturbation to apply to the INR weights",
+    )
+    p.add_argument(
+        "--linear_assignment",
+        type=str,
+        default=None,
+        choices=["PD", "DP", "P", "D", None],
+        help="Type of linear assignment to use for matching weights and biases (PD, DP, P, D)",
+    )
+    p.add_argument(
+        "--save_matrices",
+        action="store_true",
+        help="Save the loss matrices for later analysis",
+    )
+    p.add_argument(
+        "--orbit_transformation",
+        type=str,
+        default="PD",
+        choices=["PD", "P", "D"],
+        help="Type of transformation to apply to create the orbit dataset",
     )
     return p.parse_args()
 
@@ -344,6 +515,7 @@ def main():
             inr_path=inr_path,
             device=device,
             dataset_size=args.dataset_size,
+            transform_type=args.orbit_transformation,
         )
 
         ## Run orbit interpolation experiment
@@ -359,14 +531,21 @@ def main():
         else:
             raise FileNotFoundError(f"None of the paths exist: {possible_pahts}")
 
-        # # Sample INR to create orbit
-        # args.image_save_path = f"analysis/resources/interpolation/interpolation_expid={experiment_id}_inrlabel={inr_label}.png"
-
-        loss_matrix_original, loss_matrix_reconstruction = interpolation_experiment(
-            args=args,
-            conf=conf, 
-            device=device,
-        )
+      
+        if args.linear_assignment:
+            loss_matrix_original, loss_matrix_reconstruction = linear_assignment_experiment(
+                args=args,
+                conf=conf, 
+                device=device,
+                matching_type=args.linear_assignment,
+            )
+        else:
+            # Sample INR to create orbit
+            loss_matrix_original, loss_matrix_reconstruction = interpolation_experiment(
+                args=args,
+                conf=conf, 
+                device=device,
+            )
 
         # Clear unused variables and free memory
         delete_orbit_dataset(orbit_dataset_path)
@@ -381,16 +560,25 @@ def main():
     loss_matrix_original_list = torch.cat(loss_matrix_original_list, dim=0)
     loss_matrix_reconstruction_list = torch.cat(loss_matrix_reconstruction_list, dim=0)
 
+    # Save loss matrices for later analysis
+    if args.save_matrices:
+        output_dir = pathlib.Path("analysis/resources/interpolation/matrices")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        method = "linear_assignment" if args.linear_assignment else "scalegmn"
+        filename_original = f"loss_matrix-naive-{method}-{args.orbit_transformation}-numruns={num_runs}-perturbation={args.perturbation}.pt"
+        filename_reconstruction = f"loss_matrix-reconstruction-{method}-{args.orbit_transformation}-numruns={num_runs}-perturbation={args.perturbation}.pt"
+
+        torch.save(loss_matrix_original_list, output_dir / filename_original)
+        torch.save(loss_matrix_reconstruction_list, output_dir / filename_reconstruction)
+
     plot_interpolation_curves(
         loss_matrices=[
-            (loss_matrix_original_list, "Original"),
-            (loss_matrix_reconstruction_list, "Reconstructed")
+            (loss_matrix_original_list, "Naive"),
+            (loss_matrix_reconstruction_list, "Linear Assignment")
         ],
-        save_path=f"analysis/resources/interpolation/interpolation_numruns={num_runs}_perturbation={args.perturbation}.png"
-,
+        save_path=f"analysis/resources/interpolation/interpolation_numruns={num_runs}_perturbation={args.perturbation}.png",
     )
-    
-    
 
 
 if __name__ == "__main__":

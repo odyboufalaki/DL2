@@ -1,3 +1,4 @@
+from functools import partial
 import json
 import torch
 
@@ -53,10 +54,23 @@ def get_args():
 
 # ------------------------------
 # Group transformation functions
+def get_transform_function(name: str) -> Callable:
+    transform_functions = {
+        "PD": partial(transform_weights_biases, flip_signs=True, permute=True),
+        "P": partial(transform_weights_biases, flip_signs=False, permute=True),
+        "D": partial(transform_weights_biases, flip_signs=True, permute=False),
+    }
+    
+    if name not in transform_functions:
+        raise ValueError(f"Invalid transform function: {name}")
+    
+    return transform_functions[name]
+        
+
 def transform_weights_biases(
     w: torch.Tensor, b: torch.Tensor, w_next: torch.Tensor,
-    flip_signs: bool = True,
-    permute: bool = True,
+    flip_signs: bool,
+    permute: bool,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Applies random transformations to the weight matrix `w` and the corresponding
@@ -82,12 +96,19 @@ def transform_weights_biases(
     """
     assert flip_signs or permute, "At least one of flip_signs or permute_positions must be True"
     transformation = torch.eye(w.size(0), device=w.device, dtype=w.dtype)
+    # Define sign flip matrix D and permutation matrix P separately
+    D = torch.eye(w.size(0), device=w.device, dtype=w.dtype)  # Identity matrix for sign flips
+    P = torch.eye(w.size(0), device=w.device, dtype=w.dtype)  # Identity matrix for permutations
+    
     if flip_signs:
-        transformation = torch.randint(0, 2, (w.size(0),), device=w.device, dtype=w.dtype) * 2 - 1
-        transformation = torch.diag(transformation)
+        signs = torch.randint(0, 2, (w.size(0),), device=w.device, dtype=w.dtype) * 2 - 1
+        D = torch.diag(signs)
+    
     if permute:
-        perm = torch.randperm(transformation.size(0), device=w.device)
-        transformation = transformation[perm]
+        perm = torch.randperm(w.size(0), device=w.device)
+        P = torch.eye(w.size(0), device=w.device, dtype=w.dtype)[perm]
+    
+    transformation = P @ D
 
     w = transformation @ w
     b = transformation @ b
@@ -216,7 +237,8 @@ def generate_orbit_dataset(
     output_dir: str,
     inr_path: str,
     device: torch.device,
-    dataset_size: int = 2**12,
+    dataset_size: int = 2 ** 12,
+    transform_type: str = "PD",
 ) -> None:
     """
     Compute the loss matrix for the given dataset using the INR model.
@@ -247,6 +269,7 @@ def generate_orbit_dataset(
         sd, flips = transform_inr(
             sd=original_sd,
             layers_to_flip=layers_to_flip,
+            transform=get_transform_function(transform_type)
         )  # apply the transformation
         iteration_flips = flips  # flips is a tuple of flip tensors, one for each layer
         # Do not repeat the same transformation
@@ -313,6 +336,7 @@ def delete_orbit_dataset(output_dir: str) -> None:
         print(f"Deleted the directory: {output_dir}")
     else:
         print(f"The directory {output_dir} does not exist.")
+
 
 if __name__ == "__main__":
     torch.set_float32_matmul_precision("high")

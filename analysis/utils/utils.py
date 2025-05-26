@@ -385,38 +385,51 @@ def plot_interpolation_curves(
             - A string representing the name/label for the curve.
         save_path (str): Path to save the plot (optional).
     """
-    plt.ylim(0, max([loss_matrix.mean(dim=0).max().item() for loss_matrix, _ in loss_matrices]) * 5)
+    plt.figure(figsize=(6, 4))
+    plt.ylim(0, max([loss_matrix.mean(dim=0).max().item() for loss_matrix, _ in loss_matrices]) * 1.5)
 
     colors = plt.cm.viridis(np.linspace(0, 1, len(loss_matrices)))
     for color, (loss_matrix, label) in zip(colors, loss_matrices):
+        # Calculate statistics
         loss_mean_curve = loss_matrix.mean(dim=0).cpu().numpy().astype(np.float64)
-        loss_min_curve = loss_matrix.min(dim=0).values.cpu().numpy().astype(np.float64)
-        loss_max_curve = loss_matrix.max(dim=0).values.cpu().numpy().astype(np.float64)
+        loss_std_curve = loss_matrix.std(dim=0).cpu().numpy().astype(np.float64)
 
+        x_axis = np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1)
+        # Plot mean curve
         plt.plot(
-            np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1),
+            x_axis,
             loss_mean_curve,
+            '-',
             label=label,
             color=color,
+            linewidth=1.5,
+            zorder=3,
         )
+        # Plot triangles at each point
         plt.scatter(
-            np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1),
+            x_axis,
             loss_mean_curve,
-            marker='^',
+            marker='^',  # Triangle marker
             color=color,
+            s=40,  # Size of markers
+            zorder=4,  # Ensure markers are above the line
+            alpha=0.7,  # Slightly transparent
         )
+        
+        # Plot std curve
         plt.fill_between(
-            np.arange(len(loss_mean_curve)) / (len(loss_mean_curve) - 1),
-            loss_min_curve,
-            loss_max_curve,
-            alpha=0.3,
-            label=f"{label} range (min-max)",
+            x_axis,
+            loss_mean_curve - loss_std_curve,
+            loss_mean_curve + loss_std_curve,
             color=color,
+            alpha=0.2,
+            zorder=1,
         )
-
+       
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.10, right=0.98, top=0.98, bottom=0.12)
     plt.xlabel("Interpolation Step")
     plt.ylabel("Loss")
-    plt.title("Interpolation Loss Curves")
     plt.legend()
     plt.show()
 

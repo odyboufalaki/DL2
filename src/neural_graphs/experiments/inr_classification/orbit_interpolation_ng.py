@@ -2,6 +2,7 @@ import argparse
 import gc
 import json
 import os
+import pathlib
 import random
 from functools import partial
 from typing import Callable
@@ -35,7 +36,7 @@ from src.scalegmn.autoencoder import create_batch_wb
 from src.phase_canonicalization.test_inr import test_inr
 from src.utils.helpers import overwrite_conf, set_seed
 
-NUM_INTERPOLATION_SAMPLES = 10
+NUM_INTERPOLATION_SAMPLES = 40
 BATCH_SIZE = 32
 
 
@@ -240,7 +241,7 @@ def get_args():
     p.add_argument(
         "--dataset_size",
         type=int,
-        default=2**12,
+        default=512,
         help="Number of augmented INRs to generate",
     )
     
@@ -257,7 +258,7 @@ def get_args():
     p.add_argument(
         "--perturbation",
         type=float,
-        default=0.005,
+        default=0,
         help="Perturbation to apply to the INR weights",
     )
 
@@ -272,7 +273,21 @@ def get_args():
         type=str,
         default="analysis/tmp_dir/orbit/mnist_orbit_splits.json",
     )
-    
+
+    p.add_argument(
+        "--save_matrices",
+        action="store_true",
+        help="Save the loss matrices to disk",
+    )
+
+    p.add_argument(
+        "--orbit_transformation",
+        type=str,
+        default="PD",
+        choices=["PD", "P", "D"],
+        help="Type of transformation to apply to create the orbit dataset",
+    )
+
     
     args, unknown = p.parse_known_args()
     # strip your args out of sys.argv so Hydra never sees them
@@ -312,8 +327,10 @@ def main(cfg):
                               "dataset_path": args.dataset_path,
                               "num_runs": args.num_runs,
                               "split_path": args.split_path,
+                              "save_matrices": args.save_matrices,
+                              "transform_type": args.orbit_transformation,  # or "sign_flipping"
+                                },
             }
-    }
     
     # merge it into your main cfg (this will add any new keys under model/data)
     cfg = OmegaConf.merge(cfg, override)
@@ -364,6 +381,7 @@ def main(cfg):
             inr_path=inr_path,
             device=device,
             dataset_size=cfg.latent_analysis.dataset_size,
+            transform_type= cfg.latent_analysis.transform_type,
         )
 
         ## Run orbit interpolation experiment
@@ -400,12 +418,24 @@ def main(cfg):
     loss_matrix_original_list = torch.cat(loss_matrix_original_list, dim=0)
     loss_matrix_reconstruction_list = torch.cat(loss_matrix_reconstruction_list, dim=0)
 
+  
+    if cfg.latent_analysis.save_matrices:
+        output_dir = pathlib.Path("analysis/resources/interpolation/matrices")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        method = "neural_graphs" 
+        filename_original = f"loss_matrix-naive-{method}-{cfg.latent_analysis.transform_type}-numruns={num_runs}-perturbation={cfg.latent_analysis.perturbation}.pt"
+        filename_reconstruction = f"loss_matrix-reconstruction-{method}-{cfg.latent_analysis.transform_type}-numruns={num_runs}-perturbation={cfg.latent_analysis.perturbation}.pt"
+
+        torch.save(loss_matrix_original_list, output_dir / filename_original)
+        torch.save(loss_matrix_reconstruction_list, output_dir / filename_reconstruction)
+
     plot_interpolation_curves(
         loss_matrices=[
-            (loss_matrix_original_list, "Original"),
+            (loss_matrix_original_list, "Naive"),
             (loss_matrix_reconstruction_list, "Reconstructed")
         ],
-        save_path=cfg.latent_analysis.image_save_path,
+        save_path=f"analysis/resources/interpolation/interpolation_numruns={num_runs}_perturbation={cfg.latent_analysis.perturbation}.png",
     )
     
     
