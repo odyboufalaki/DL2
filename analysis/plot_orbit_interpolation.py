@@ -1,10 +1,12 @@
+import argparse
 import pathlib
 import torch
 from collections import defaultdict
 from utils.utils import plot_interpolation_curves
 
-def load_loss_matrices():
-    matrix_dir = pathlib.Path("analysis/resources/interpolation/matrices")
+
+def load_loss_matrices(args: argparse.Namespace):
+    matrix_dir = pathlib.Path(args.matrix_dir)
     matrices = defaultdict(dict)
     
     # Track metadata from first file to verify consistency
@@ -54,8 +56,27 @@ def load_loss_matrices():
     return matrices, metadata
 
 
+def get_args():
+    p = argparse.ArgumentParser()
+    p.add_argument(
+        "--matrix_dir",
+        type=str,
+        default="analysis/resources/interpolation/matrices",
+        help="Directory containing the loss matrices",
+    )
+    p.add_argument(
+        "--output_dir",
+        type=str,
+        default="analysis/resources/interpolation",
+        help="Directory to save the plots",
+    )
+    args = p.parse_args()
+    return args
+
+
 def main():
-    matrices, metadata = load_loss_matrices()
+    args = get_args()
+    matrices, metadata = load_loss_matrices(args)
     print("Plotting experiments for transformations:", matrices.keys())
     for transformation in matrices.keys():
         # Assert that the original matrices are the same for all methods
@@ -81,7 +102,7 @@ def main():
         
         # Plot the interpolation curves
         save_path = (
-            f"analysis/resources/interpolation/"
+            args.output_dir + "/"
             f"{transformation}_numruns={metadata['num_runs']}_perturbation={metadata['perturbation']}.png"
         )
         plot_interpolation_curves(curves, save_path=save_path)

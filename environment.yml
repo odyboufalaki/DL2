@@ -1,4 +1,4 @@
-name: scalegmn
+name: environment
 channels:
   - pytorch
   - nvidia

@@ -1,81 +1,60 @@
+"""
+Orbit interpolation experiment for the ScaleGNN model and the linear assignment.
+
+A run of the interpolation experiment consists of:
+1. Randomly choosing an INR from the test set.
+2. Creating an orbit dataset of the INR.
+3. Perturbing the INR parameters with a gaussian distributed noise (plus a perturbation parameter).
+4. Performing interpolation in weights space:
+    4.1 Naive interpolation: Between the original orbit INRs and the group-acted and perturbed INRs.
+    4.2 Autoencoder interpolation: Between the reconstructed INRs of the original orbit INRs and the reconstructed INRs of the group-acted and perturbed INRs.
+    NOTE: Reconstructing an INR implies passing it through the autoencoder.
+5. Computing the loss matrices for all the previous interpolations.
+6. Plotting the interpolation curves.
+
+The interpolation experiment consists of multiple runs, where each run is done with a different INR.
+
+For the linear assignment the experiment, 4.3 is performed instead of 4.2:
+4.3 Linear assignment interpolation: Between the original orbit INRs and the group-acted and perturbed INRs.
+"""
 import argparse
 import gc
 import json
 import os
+import pathlib
 import random
 from functools import partial
 from typing import Callable
 
 import torch
-from torch.nn.functional import mse_loss
-import torch_geometric
-from tqdm import tqdm
 import yaml
+from torch.nn.functional import mse_loss
+from tqdm import tqdm
 
+from analysis.linear_assignment import match_weights_biases_batch
 from analysis.utils.create_orbit_dataset import (
-    generate_orbit_dataset,
     delete_orbit_dataset,
+    generate_orbit_dataset,
 )
 from analysis.utils.utils import (
-    create_tmp_torch_geometric_loader,
     instantiate_inr_all_batches,
     interpolate_batch,
     load_ground_truth_image,
-    load_orbit_dataset_and_model,
     perturb_inr_all_batches,
-    plot_interpolation_curves,
     remove_tmp_torch_geometric_loader,
+    convert_and_prepare_weights,
+    NUM_INTERPOLATION_SAMPLES,
+    BATCH_SIZE,
 )
-from analysis.linear_assignment import match_weights_biases_batch
+from analysis.utils.utils_sgmn import (
+    create_tmp_torch_geometric_loader,
+    load_orbit_dataset_and_model,
+)
 from src.data.base_datasets import Batch
+from src.phase_canonicalization.test_inr import test_inr
 from src.scalegmn.autoencoder import create_batch_wb
 from src.scalegmn.inr import INR
-from src.scalegmn.models import ScaleGMN
-from src.phase_canonicalization.test_inr import test_inr
 from src.utils.helpers import overwrite_conf, set_seed
-import pathlib
-
-NUM_INTERPOLATION_SAMPLES = 40
-BATCH_SIZE = 64
-
-def convert_and_prepare_weights(rebased_weights, rebased_biases, device=None):
-    """
-    Convert rebased weights and biases to tensors and prepare them for _wb_to_tuple.
-    
-    Args:
-        rebased_weights: List of lists of numpy arrays (weights for each layer of each INR)
-        rebased_biases: List of lists of numpy arrays (biases for each layer of each INR)
-        device: Optional torch.device to move tensors to
-        
-    Returns:
-        Tuple of (weights, biases) in the format expected by _wb_to_tuple
-    """
-    # Convert to tensors
-    weights_tensors = [
-        [torch.from_numpy(w).to(device).float() if device else torch.from_numpy(w).float() 
-         for w in inr_weights]
-        for inr_weights in rebased_weights
-    ]
-    
-    biases_tensors = [
-        [torch.from_numpy(b).to(device).float() if device else torch.from_numpy(b).float() 
-         for b in inr_biases]
-        for inr_biases in rebased_biases
-    ]
-    
-    # Reshape for _wb_to_tuple
-    # We need to stack the weights and biases for each layer across the batch
-    weights = [
-        torch.stack([w[i] for w in weights_tensors]).unsqueeze(-1).permute(0,2,1,3)  # Add channel dimension
-        for i in range(len(weights_tensors[0]))  # For each layer
-    ]
-    
-    biases = [
-        torch.stack([b[i] for b in biases_tensors]).unsqueeze(-1)  # Add channel dimension
-        for i in range(len(biases_tensors[0]))  # For each layer
-    ]
-    
-    return weights, biases
 
 
 # ------------------------------
@@ -570,14 +549,6 @@ def main():
 
         torch.save(loss_matrix_original_list, output_dir / filename_original)
         torch.save(loss_matrix_reconstruction_list, output_dir / filename_reconstruction)
-
-    plot_interpolation_curves(
-        loss_matrices=[
-            (loss_matrix_original_list, "Naive"),
-            (loss_matrix_reconstruction_list, "Linear Assignment")
-        ],
-        save_path=f"analysis/resources/interpolation/interpolation_numruns={num_runs}_perturbation={args.perturbation}.png",
-    )
 
 
 if __name__ == "__main__":

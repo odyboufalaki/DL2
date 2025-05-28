@@ -1,160 +1,152 @@
-# Scale Equivariant Graph Metanetworks
-Official repository for the NeurIPS'24 paper "Scale Equivariant Graph Metanetworks" 
-by Ioannis Kalogeropoulos*, Giorgos Bouritsas* and Yannis Panagakis.
+> This work extends previous research and public codebases, please refer to the [credit attribution](#credit-attribution) section.
 
-[[arXiv](https://arxiv.org/pdf/2406.10685)]
+
+# Title of our paper
+<!-- Link to the paper: [[Title of our paper](https://arxiv.org/)] -->
 ## Abstract
-_This paper pertains to an emerging machine learning paradigm: learning higher-order functions, 
-i.e. functions whose inputs are functions themselves, _particularly
-when these inputs are Neural Networks (NNs)_. With the growing interest in architectures
-that process NNs, a recurring design principle has permeated the field:
-adhering to the permutation symmetries arising from the connectionist structure of
-NNs. _However, are these the sole symmetries present in NN parameterizations?_
-Zooming into most practical activation functions (e.g. sine, ReLU, tanh) answers
-this question negatively and gives rise to intriguing new symmetries, which we
-collectively refer to as _scaling symmetries_, that is, non-zero scalar multiplications
-and divisions of weights and biases. In this work, we propose Scale Equivariant
-Graph MetaNetworks - ScaleGMNs, a framework that adapts the Graph Metanetwork (message-passing) paradigm by incorporating scaling symmetries and thus
-rendering neuron and edge representations equivariant to valid scalings. We introduce novel building blocks, of independent technical interest, that allow for
-equivariance or invariance with respect to individual scalar multipliers or their
-product and use them in all components of ScaleGMN. Furthermore, we prove
-that, under certain expressivity conditions, ScaleGMN can simulate the forward
-and backward pass of any input feedforward neural network. Experimental results
-demonstrate that our method advances the state-of-the-art performance for several
-datasets and activation functions, highlighting the power of scaling symmetries as
-an inductive bias for NN processing._
-
-  * [Setup](#setup)
-  * [Data](#data)
-  * [Experiments](#experiments)
-  * [Citation](#citation)
 
 
-
-## Setup
-
-To create a clean virtual environment and install the necessary dependencies execute:
+## [Setup](#setup)
+Create the virtual environment:
 ```bash
-git clone git@github.com:jkalogero/scalegmn.git
-cd scalegmn/
-conda env create -n scalegmn --file environment.yml
-conda activate scalegmn
+git clone git@github.com:odyboufalaki/DL2.git
+conda env create -n environment --file environment.yml
+conda activate environment
 ```
 
-
-## Data
-First, create the `data/` directory in the root of the repository:
+Download and preprocess the data.
+For the INR datasets we use the data provided by [DWS](https://github.com/AvivNavon/DWSNets), [MNIST-INRs](https://www.dropbox.com/sh/56pakaxe58z29mq/AABtWNkRYroLYe_cE3c90DXVa?dl=0&preview=mnist-inrs.zip) - ([Navon et al. 2023](https://arxiv.org/abs/2301.12780)):
 ```bash
+# Create and export the data directory
 mkdir data
-````
-Alternatively, you can specify a different directory for the data by changing
-the corresponding fields in the config file.
+export DATA_DIR=./data
 
-### INR Classification and Editing
-For the INR datasets, we use the data provided by [DWS](https://github.com/AvivNavon/DWSNets) and [NFN](https://github.com/AllanYangZhou/nfn/).
-The datasets can be downloaded from the following links: 
-
-- [MNIST-INRs](https://www.dropbox.com/sh/56pakaxe58z29mq/AABtWNkRYroLYe_cE3c90DXVa?dl=0&preview=mnist-inrs.zip) - ([Navon et al. 2023](https://arxiv.org/abs/2301.12780))
-- [FMNIST-INRs](https://www.dropbox.com/sh/56pakaxe58z29mq/AABtWNkRYroLYe_cE3c90DXVa?dl=0&preview=fmnist_inrs.zip) - ([Navon et al. 2023](https://arxiv.org/abs/2301.12780))
-- [CIFAR10-INRs](https://drive.google.com/file/d/14RUV3eN6-lSOr9XuwyKFQFVcqKl0L2bw/view?usp=drive_link) - ([Zhou et al. 2023](https://arxiv.org/abs/2302.14040))
-
-Download the datasets and extract them in the directory `data/`. For example, you can run the following to download
-and extract the MNIST-INR dataset and generate the splits:
-```bash
-DATA_DIR=./data
+# Download the MNIST-INRs data.
+# Alternatively download manually, unzip and place in /data
 wget "https://www.dropbox.com/sh/56pakaxe58z29mq/AABrctdu2U65jGYr2WQRzmMna/mnist-inrs.zip?dl=0" -O "$DATA_DIR/mnist-inrs.zip"
 unzip -q "$DATA_DIR/mnist-inrs.zip" -d "$DATA_DIR"
-rm "$DATA_DIR/mnist-inrs.zip" # remove the zip file
-# generate the splits
+rm "$DATA_DIR/mnist-inrs.zip"
+
+# Generate the dataset splits
 python src/utils/generate_data_splits.py --data_path $DATA_DIR/mnist-inrs --save_path $DATA_DIR/mnist-inrs
+
+# Phase canonicalize
+python src/phase_canonicalization/canonicalization.py --conf src/phase_canonicalization/mnist.yml
 ```
 
-Generating the splits is necessary only for the MNIST-INR dataset.
-
-#### Phase canonicalization
-For the INR datasets, we preprocess each datapoint to canonicalize the phase symmetry (see [Algorithm 1](https://arxiv.org/pdf/2406.10685v1#algocf.1) in the appendix).
-To run the phase canonicalization script, run the following command:
-```bash
-python src/phase_canonicalization/canonicalization.py --conf src/phase_canonicalization/<dataset>.yml
-```
-where `<dataset>` can be one of `mnist`, `fmnist`, `cifar`.
-
-To apply the canonicalization to the augmented CIFAR10-INR dataset, also run:
-```bash 
-python src/phase_canonicalization/canonicalization.py --conf src/phase_canonicalization/cifar.yml --extra_aug 20
-```
-
-The above script will store the canonicalized dataset in a new directory `data/<dataset>_canon/`. The training scripts will automatically use the canonicalized dataset, if it exists.
-To use the dataset specified in the config file (and not search for `data/<dataset>_canon/`), set the `data.switch_to_canon` field of the config to `False` or simply use the CLI argument `--data.switch_to_canon False`. 
-
-### Generalization prediction
-We follow the experiments from [NFN](https://github.com/AllanYangZhou/nfn/) and use the datasets provided by [Unterthiner et al,
-2020](https://github.com/google-research/google-research/tree/master/dnn_predict_accuracy). The datasets can be downloaded from the following links:
-- [CIFAR10](https://storage.cloud.google.com/gresearch/smallcnnzoo-dataset/cifar10.tar.xz)
-- [SVHN](https://storage.cloud.google.com/gresearch/smallcnnzoo-dataset/svhn_cropped.tar.xz)
-
-
-Similarly, extract the dataset in the directory `data/` and execute:
-
-For the CIFAR10 dataset:
-```bash
-tar -xvf cifar10.tar.xz
-# download cifar10 splits
-wget https://github.com/AllanYangZhou/nfn/raw/refs/heads/main/experiments/predict_gen_data_splits/cifar10_split.csv -O data/cifar10/cifar10_split.csv
-```
-For the SVHN dataset:
-```bash
-tar -xvf svhn_cropped.tar.xz
-# download svhn splits
-wget https://github.com/AllanYangZhou/nfn/raw/refs/heads/main/experiments/predict_gen_data_splits/svhn_split.csv -O data/svhn_cropped/svhn_split.csv
-```
-
- 
-
-## Experiments
-For every experiment, we provide the corresponding configuration file in the `config/` directory.
+## [Reproducing the experiments](#experiments)
+In an identical manner to [1], for every experiment we provide the corresponding configuration file in the `config/` directory.
 Each config contains the selected hyperparameters for the experiment, as well as the paths to the dataset.
-To enable wandb logging, use the CLI argument `--wandb True`. For more useful CLI arguments, check the [src/utils/setup_arg_parser.py](src/utils/setup_arg_parser.py) file.
-
-**Note:** To employ a GMN accounting only for the permutation symmetries, simply set 
-`--scalegmn_args.symmetry=permutation`.
-
-### INR Classification
-To train and evaluate ScaleGMN on the INR classification task, 
-select any config file under [configs/mnist_cls](configs/mnist_cls)
-, [configs/fmnist_cls](configs/fmnist_cls) or 
-[configs/cifar_inr_cls](configs/cifar_inr_cls). For example, to 
-train ScaleGMN on the FMNIST-INR dataset, execute the following:
+To enable wandb logging, use the CLI argument `--wandb True`.
+### Preliminary step: train the autoencoders
 ```bash
-python inr_classification.py --conf configs/fmnist_cls/scalegmn.yml
+# Train the ScaleGMN autoencoder (wandb optional)
+python train_autoencoder.py --conf configs/mnist_rec/scalegmn_autoencoder.yml --wandb True
 ```
-
-### INR Editing
-To train and evaluate ScaleGMN on the INR editing task, use the configs under
-[configs/mnist_editing](configs/mnist_editing) directory and execute:
 
 ```bash
-python inr_editing.py --conf configs/mnist_editing/scalegmn_bidir.yml
+# Train the Neural Graphs autoencoder
+
 ```
 
-### Generalization prediction
-To train and evaluate ScaleGMN on the INR classification task, 
-select any config file under [configs/cifar10](configs/cifar10)
-or [configs/svhn](configs/svhn). For example, to 
-train ScaleGMN on the CIFAR10 dataset on heterogeneous activation functions,
-execute the following:
+Optionally train the autoencoder with the ablation of the scale canonicalization.
 
 ```bash
-python predicting_generalization.py --conf configs/cifar10/scalegmn_hetero.yml
+# Train the ScaleGMN autoencoder with scale ablation (wandb optional)
+python train_autoencoder.py --conf configs/mnist_rec/scalegmn_autoencoder_ablation.yml --wandb True
 ```
 
-# Citation
-
-```bib
-@article{kalogeropoulos2024scale,
-    title={Scale Equivariant Graph Metanetworks},
-    author={Kalogeropoulos, Ioannis and Bouritsas, Giorgos and Panagakis, Yannis},
-    journal={Advances in Neural Information Processing Systems},
-    year={2024}
-}
+Now, in order to generalize the code from the experiments first define the saved model weights and config file as environment variables
+```bash
+export MODEL_CONFIG=configs/mnist_rec/scalegmn_autoencoder.yml
+export MODEL_WEIGHTS=models/mnist_rec_scale/scalegmn_autoencoder/scalegmn_autoencoder_mnist_rec.pt
 ```
+
+### Experiment 1: Visualizing the latent space and INR orbits
+```bash
+# Visualize the latent space for the ScaleGMN autoencoder
+python analysis/dim_red.py \
+--conf $MODEL_CONFIG \
+--ckpt $MODEL_WEIGHTS \
+--outdir analysis/resources/visualization \
+--seed 0
+```
+
+```bash
+# Visualize the latent space for the Neural Graphs autoencoder
+
+```
+
+### Experiment 2: Interpolation experiment
+
+
+We now define the type of group action to be applied to the weights and biases of an INR in order to generate the orbit dataset (a dataset of functionally equivalent INRs but that live in different basins given that we applied the group action).
+    
+    - P: Only permute
+    - D: Only flip the signs (+1, -1)
+    - PD: First flip signs then permute (both)
+
+
+```bash
+export INTERPOLATION_TYPE=PD
+```
+
+These commands will perform the interpolation and save the loss of the interpolated INRs at different points in the form of a matrix.
+```bash
+# Interpolate using linear assignment
+python analysis/orbit_interpolation.py \
+--conf $MODEL_CONFIG \
+--tmp_dir analysis/tmp_dir \
+--dataset_size 512 \
+--split test \
+--seed 0 \
+--num_runs 10 \
+--perturbation 0.005 \
+--linear_assignment $INTERPOLATION_TYPE \
+--orbit_transformation $INTERPOLATION_TYPE \
+--save_matrices
+```
+
+```bash
+# Interpolate using ScaleGMN autoencoder
+python analysis/orbit_interpolation.py \
+--conf $MODEL_CONFIG \
+--ckpt $MODEL_WEIGHTS \
+--tmp_dir analysis/tmp_dir \
+--dataset_size 512 \
+--split test \
+--seed 0 \
+--num_runs 10 \
+--perturbation 0.005 \
+--orbit_transformation $INTERPOLATION_TYPE \
+--save_matrices
+```
+
+```bash
+# Interpolate using Neural Graphs autoencoder
+python analysis/orbit_interpolation_ng.py \
+--ckpt $MODEL_WEIGHTS \
+--tmp_dir analysis/tmp_dir \
+--dataset_size 512 \
+--split test \
+--seed 0 \
+--num_runs 10 \
+--perturbation 0.005 \
+--orbit_transformation $INTERPOLATION_TYPE \
+--save_matrices
+```
+
+Finally generate the interpolation plots using the loss matrices:
+```bash
+python analysis/plot_orbit_interpolation.py \
+--matrix_dir analysis/resources/interpolation/matrices \
+--output_dir analysis/resources/interpolation
+```
+
+### [Credit attribution](#credit-attribution)
+This repository and our research builds upon the work of I. Kalogeropoulos et al. [1] and M. Kofinas et al. [2] and their respective codebases.
+
+
+[1] Kalogeropoulos, I. et al. (2024). *Scale Equivariant Graph Metanetworks.* Advances in Neural Information Processing Systems 37 (NeurIPS 2024). https://arxiv.org/pdf/2406.10685
+
+[2] Kofinas, M. et al. (2024). *Graph Neural Networks for Learning Equivariant Representations of Neural Networks.* In 12th International Conference on Learning Representations (ICLR). https://arxiv.org/pdf/2403.12143.

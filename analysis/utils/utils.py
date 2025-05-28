@@ -1,110 +1,23 @@
+"""General utils for the interpolation experiment."""
 import json
 import os
 
+import matplotlib.pyplot as plt
 import numpy as np
-from src.scalegmn.models import ScaleGMN
 import torch
-import yaml
 import torch_geometric
-
+import torchvision.transforms as transforms
+from PIL import Image
 from tqdm import tqdm
 
-from src.utils.helpers import overwrite_conf
 from src.data import dataset
-from src.scalegmn.autoencoder import get_autoencoder
 from src.data.base_datasets import Batch
+from src.scalegmn.autoencoder import get_autoencoder
 from src.scalegmn.inr import INR
-from PIL import Image
-import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
+from src.utils.helpers import overwrite_conf
 
-
-
-@torch.no_grad()
-def collect_latents(
-    model: torch.nn.Module,
-    loader: torch_geometric.loader.DataLoader,
-    device: torch.device,
-) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]:
-    """Collects the latent codes from the model encoder for all samples in the dataset.
-    Args:
-        model (torch.nn.Module): The model to use for encoding.
-        loader (torch_geometric.loader.DataLoader): The data loader for the dataset.
-        device (torch.device): The device to use for computation.
-    Returns:
-        tuple: A tuple containing:
-            - zs (torch.Tensor): The latent codes (tensor of shape [N, latent_dim]).
-            - ys (torch.Tensor): The labels (tensor of shape [N]).
-            - wbs (list[torch.Tensor]): The raw INR parameters (list of tensors).
-    """
-    zs, ys, wbs = [], [], []
-    model.eval()
-    for batch, wb in tqdm(loader, desc="Collecting latents"):
-        batch = batch.to(device)
-        z = model.encoder(batch)  # [B, latent_dim]
-        zs.append(z.cpu())
-        ys.append(batch.label.cpu())
-        wbs.append(wb)  # raw INR params, useful for reconstructions
-    return torch.cat(zs), torch.cat(ys), wbs
-
-
-def load_orbit_dataset_and_model(
-    conf: str,
-    dataset_path: str,
-    split_path: str,
-    device: torch.device,
-    ckpt_path: str = None,
-    return_model: bool = True,
-) -> tuple[ScaleGMN, torch_geometric.loader.DataLoader]:
-    """
-    Loads the orbit dataset and the pre-trained model.
-
-    Args:
-        conf (str): Path to the configuration YAML file.
-        dataset_path (str): Path to the dataset directory.
-        split_path (str): Path to the dataset split file.
-        ckpt_path (str): Path to the model checkpoint file.
-        device (torch.device): The device to load the model onto.
-        debug (bool): If True, loads only a subset of the dataset for debugging.
-
-    Returns:
-        tuple: A tuple containing:
-            - net (torch.nn.Module): The loaded model.
-            - loader (torch_geometric.loader.DataLoader): The data loader for the dataset.
-    """
-    # Overwrite the dataset path
-    conf["data"]["dataset_path"] = dataset_path
-
-    # Load the orbit dataset
-    conf["data"]["split_path"] = split_path
-    split_set = dataset(
-        conf["data"],
-        split="test",
-        direction=conf["scalegmn_args"]["direction"],
-        equiv_on_hidden=True,
-        get_first_layer_mask=True,
-        return_wb=True,
-    )
-    loader = torch_geometric.loader.DataLoader(
-        split_set, batch_size=conf["batch_size"], shuffle=False,
-    )
-    print("Loaded", len(split_set), "samples in the dataset.")
-
-    # Load the model
-    decoder_hidden_dim_list = [
-        conf["scalegmn_args"]["d_hid"] * elem
-        for elem in conf["decoder_args"]["d_hidden"]
-    ]
-    conf["decoder_args"]["d_hidden"] = decoder_hidden_dim_list
-    conf["scalegmn_args"]["layer_layout"] = split_set.get_layer_layout()
-    
-    if return_model:
-        net = get_autoencoder(conf, autoencoder_type="inr").to(device)
-        net.load_state_dict(torch.load(ckpt_path, map_location=device))
-        net.eval()
-
-    return (net, loader) if return_model else loader
-
+NUM_INTERPOLATION_SAMPLES = 40
+BATCH_SIZE = 64
 
 def perturb_inr_batch(wb: Batch, perturbation: float) -> Batch:
     """Perturb the INR parameters in the batch by a small amount.
@@ -135,21 +48,23 @@ def perturb_inr_batch(wb: Batch, perturbation: float) -> Batch:
 def perturb_inr_all_batches(
     loader: torch_geometric.loader.DataLoader,
     perturbation: float,
+    is_tuple_loader: bool = True,
 ) -> list[Batch]:
     """Perturb the INR parameters in all batches of the dataset.
 
     Args:
         loader (torch_geometric.loader.DataLoader): The data loader for the dataset.
         perturbation (float): The amount to perturb the parameters by.
-
+        is_tuple_loader (bool): Whether the loader returns tuples.
     Returns:
         list[Batch]: A list of perturbed batches of INR parameters.
     """
     perturbed_dataset = []
-    for _, wb in loader:
+    for batch in loader:
+        batch = batch[1] if is_tuple_loader else batch
         # Perturb weights and biases
         batch_perturbed = perturb_inr_batch(
-            wb, perturbation=perturbation,
+            batch, perturbation=perturbation,
         )
         perturbed_dataset.append(batch_perturbed)
     return perturbed_dataset
@@ -371,6 +286,46 @@ def load_ground_truth_image(
     image_tensor = transform(image).to(device)
 
     return image_tensor
+
+
+def convert_and_prepare_weights(rebased_weights, rebased_biases, device=None):
+    """
+    Convert rebased weights and biases to tensors and prepare them for _wb_to_tuple.
+    
+    Args:
+        rebased_weights: List of lists of numpy arrays (weights for each layer of each INR)
+        rebased_biases: List of lists of numpy arrays (biases for each layer of each INR)
+        device: Optional torch.device to move tensors to
+        
+    Returns:
+        Tuple of (weights, biases) in the format expected by _wb_to_tuple
+    """
+    # Convert to tensors
+    weights_tensors = [
+        [torch.from_numpy(w).to(device).float() if device else torch.from_numpy(w).float() 
+         for w in inr_weights]
+        for inr_weights in rebased_weights
+    ]
+    
+    biases_tensors = [
+        [torch.from_numpy(b).to(device).float() if device else torch.from_numpy(b).float() 
+         for b in inr_biases]
+        for inr_biases in rebased_biases
+    ]
+    
+    # Reshape for _wb_to_tuple
+    # We need to stack the weights and biases for each layer across the batch
+    weights = [
+        torch.stack([w[i] for w in weights_tensors]).unsqueeze(-1).permute(0,2,1,3)  # Add channel dimension
+        for i in range(len(weights_tensors[0]))  # For each layer
+    ]
+    
+    biases = [
+        torch.stack([b[i] for b in biases_tensors]).unsqueeze(-1)  # Add channel dimension
+        for i in range(len(biases_tensors[0]))  # For each layer
+    ]
+    
+    return weights, biases
 
 
 def plot_interpolation_curves(

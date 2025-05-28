@@ -126,8 +126,6 @@ def main(args=None):
         effective_conf["data"],  # Use effective_conf
         split="val",
         debug=effective_conf["debug"],  # Use effective_conf
-        # node_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['node_pos_embed'], # Use effective_conf
-        # edge_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['edge_pos_embed'], # Use effective_conf
         direction=effective_conf["scalegmn_args"]["direction"],  # Use effective_conf
         equiv_on_hidden=equiv_on_hidden,
         get_first_layer_mask=get_first_layer_mask,
@@ -138,8 +136,6 @@ def main(args=None):
         effective_conf["data"],  # Use effective_conf
         split="test",
         debug=effective_conf["debug"],  # Use effective_conf
-        # node_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['node_pos_embed'], # Use effective_conf
-        # edge_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['edge_pos_embed'], # Use effective_conf
         direction=effective_conf["scalegmn_args"]["direction"],  # Use effective_conf
         equiv_on_hidden=equiv_on_hidden,
         get_first_layer_mask=get_first_layer_mask,
@@ -151,8 +147,6 @@ def main(args=None):
             effective_conf["data"],  # Use effective_conf
             split="plot_epoch",
             debug=effective_conf["debug"],  # Use effective_conf
-            # node_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['node_pos_embed'], # Use effective_conf
-            # edge_pos_embed=effective_conf['scalegmn_args']['graph_constructor']['edge_pos_embed'], # Use effective_conf
             direction=effective_conf["scalegmn_args"][
                 "direction"
             ],  # Use effective_conf
@@ -251,8 +245,6 @@ def main(args=None):
     # =============================================================================================
     # TRAINING LOOP
     # =============================================================================================
-    # best_val_acc = -1
-    # best_train_acc = -1
     best_val_loss = float("inf")
     best_train_loss = float("inf")
     (
@@ -373,33 +365,7 @@ def main(args=None):
                     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],
                     effective_conf=effective_conf,
                 )
-                # test_loss_dict = evaluate(
-                #     model=net,
-                #     loader=test_loader,
-                #     image_size=effective_conf["data"]["image_size"],
-                #     criterion=criterion,
-                #     device=device,
-                #     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],
-                #     effective_conf=effective_conf,
-                # )
                 val_loss = val_loss_dict["avg_loss"]
-                # val_acc = val_loss_dict["avg_acc"]
-                # test_loss = test_loss_dict["avg_loss"]
-                # test_acc = test_loss_dict["avg_acc"]
-
-                # train_loss_dict = evaluate(
-                #     model=net,
-                #     loader=train_loader,
-                #     image_size=effective_conf["data"]["image_size"],
-                #     criterion=criterion,
-                #     eval_dataset=train_set,
-                #     num_samples=len(val_set),
-                #     batch_size=effective_conf["batch_size"],
-                #     num_workers=effective_conf["num_workers"],
-                #     device=device,
-                #     pixel_expansion=effective_conf["train_args"]["pixel_expansion"],
-                #     effective_conf=effective_conf,
-                # )  # Use effective_conf
 
                 best_val_criteria = val_loss <= best_val_loss
                 if best_val_criteria:
@@ -426,49 +392,10 @@ def main(args=None):
                             )  # Use effective_conf
                         torch.save(net.state_dict(), save_path)
 
-                # best_train_criteria = train_loss_dict["avg_loss"] <= best_train_loss
-                # if best_train_criteria:
-                #     best_train_loss= train_loss_dict["avg_loss"]
-                #     best_train_results_TRAIN = train_loss_dict
-
                 if run:  # Check if wandb run exists
                     log = {
-                        # "train/avg_loss": train_loss_dict["avg_loss"],
-                        # "train/acc": train_loss_dict["avg_acc"],
-                        # "train/conf_mat": wandb.plot.confusion_matrix(
-                        #     probs=None,
-                        #     y_true=train_loss_dict["gt"],
-                        #     preds=train_loss_dict["predicted"],
-                        #     class_names=range(10),
-                        # ), # Commented out as confusion matrix depends on task type
-                        # "train/best_loss": best_train_results["avg_loss"],
-                        # "train/best_acc": best_train_results["avg_acc"],
-                        # "train/best_loss_TRAIN_based": best_train_results_TRAIN[
-                        #    "avg_loss"
-                        # ],
-                        # "train/best_acc_TRAIN_based": best_train_results_TRAIN[
-                        #    "avg_acc"
-                        # ],
                         "val/loss": val_loss,
-                        # "val/acc": val_acc,  # This is the metric needed for the sweep
                         "val/best_loss": best_val_results["avg_loss"],
-                        # "val/best_acc": best_val_results["avg_acc"],
-                        # "val/conf_mat": wandb.plot.confusion_matrix(
-                        #     probs=None,
-                        #     y_true=val_loss_dict["gt"],
-                        #     preds=val_loss_dict["predicted"],
-                        #     class_names=range(10),
-                        # ), # Commented out as confusion matrix depends on task type
-                        # "test/loss": test_loss,
-                        # "test/acc": test_acc,
-                        # "test/best_loss": best_test_results["avg_loss"],
-                        # "test/best_acc": best_test_results["avg_acc"],
-                        # "test/conf_mat": wandb.plot.confusion_matrix(
-                        #     probs=None,
-                        #     y_true=test_loss_dict["gt"],
-                        #     preds=test_loss_dict["predicted"],
-                        #     class_names=range(10),
-                        # ), # Commented out as confusion matrix depends on task type
                         "epoch": epoch,
                     }
 
@@ -625,7 +552,6 @@ def log_epoch_images(
         reconstructed_imgs = test_inr(w_recon, b_recon, pixel_expansion=pixel_expansion)
     elif effective_conf["train_args"]["reconstruction_type"] == "pixels":
         reconstructed_imgs = out.view(len(batch), *(tuple(image_size)))
-        # print(f"reconstructed_imgs mean per sample: {out.view(out.size(0), -1).mean(dim=1).std()}")
     else:
         raise ValueError(
             f"Unknown autoencoder type: {effective_conf['train_args']['reconstruction_type']}"
@@ -636,9 +562,6 @@ def log_epoch_images(
     # Mimic the torch save function transformations
     original_imgs = original_imgs.mul(255).add_(0.5).clamp_(0, 255)
     reconstructed_imgs = reconstructed_imgs.mul(255).add_(0.5).clamp_(0, 255)
-
-    # Log images as a table
-    # _create_and_log_table(original_imgs, reconstructed_imgs, epoch)
 
     # Log images as a contantenated image
     _create_and_log_image_grid(original_imgs, reconstructed_imgs, epoch)

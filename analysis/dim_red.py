@@ -11,15 +11,21 @@ import matplotlib.pyplot as plt
 from src.utils.helpers import overwrite_conf, set_seed
 from src.scalegmn.autoencoder import get_autoencoder
 from src.data import dataset
-from analysis.utils import collect_latents
+from analysis.utils.utils_sgmn import collect_latents as collect_latents
 
 class DimensionalityReducer:
     def __init__(self, method, **kwargs):
         self.method = method
         self.kwargs = kwargs
 
-    def full_pipeline(self, model, loader, device, save_path=None):
-        zs, ys, _ = collect_latents(model, loader, device)
+    def full_pipeline(
+        self,
+        model,
+        zs,
+        ys,
+        device,
+        save_path=None,
+    ):
         embeddings = self.fit_transform(zs)
 
         if save_path is not None:
@@ -83,21 +89,19 @@ def get_args():
     p.add_argument(
         "--conf",
         type=str,
-        # required=True,
-        default="configs/mnist_rec/scalegmn_autoencoder_ablation.yml",
+        default="configs/mnist_rec/scalegmn_autoencoder.yml",
         help="YAML config used during training",
     )
     p.add_argument(
         "--ckpt",
         type=str,
-        # required=True,
-        default="models/mnist_rec_scale/scalegmn_autoencoder_ablation/scalegmn_autoencoder_baseline_mnist_rec_ablation.pt",
+        default="models/mnist_rec_scale/scalegmn_autoencoder/scalegmn_autoencoder_mnist_rec.pt",
         help="Path to model checkpoint (.pt or .ckpt)",
     )
     p.add_argument(
         "--split", type=str, default="test", choices=["train", "val", "test"]
     )
-    p.add_argument("--outdir", type=str, default="latent/resources/manifold_ablation")
+    p.add_argument("--outdir", type=str, default="analysis/resources/visualization")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--debug", type=bool, default=False)
     return p.parse_args()
@@ -149,7 +153,6 @@ def main():
         min_dist=0.1,
         n_components=2,
         metric="cosine",
-        # random_state=42,
     )
 
     tsne_reducer = DimensionalityReducer(
@@ -158,13 +161,20 @@ def main():
         perplexity=10,
         init="pca",
         learning_rate="auto",
-        # random_state=42,
+    )
+
+    # Collect latents
+    zs, ys, _ = collect_latents(
+        model=net,
+        loader=loader,
+        device=device,
     )
 
     # Run UMAP
     umap_reducer.full_pipeline(
         model=net,
-        loader=loader,
+        zs=zs,
+        ys=ys,
         device=device,
         save_path=os.path.join(args.outdir, "umap"),
     )
@@ -172,7 +182,8 @@ def main():
     # Run t-SNE
     tsne_reducer.full_pipeline(
         model=net,
-        loader=loader,
+        zs=zs,
+        ys=ys,
         device=device,
         save_path=os.path.join(args.outdir, "tsne"),
     )

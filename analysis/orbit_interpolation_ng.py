@@ -1,44 +1,57 @@
+"""
+Orbit interpolation experiment for the Neural Graphs model.
+
+A run of the interpolation experiment consists of:
+1. Randomly choosing an INR from the test set.
+2. Creating an orbit dataset of the INR.
+3. Perturbing the INR parameters with a gaussian distributed noise (plus a perturbation parameter).
+4. Performing interpolation in weights space:
+    4.1 Naive interpolation: Between the original orbit INRs and the group-acted and perturbed INRs.
+    4.2 Autoencoder interpolation: Between the reconstructed INRs of the original orbit INRs and the reconstructed INRs of the group-acted and perturbed INRs.
+    NOTE: Reconstructing an INR implies passing it through the autoencoder.
+5. Computing the loss matrices for all the previous interpolations.
+6. Plotting the interpolation curves.
+
+The interpolation experiment consists of multiple runs, where each run is done with a different INR.
+"""
 import argparse
 import gc
 import json
 import os
 import pathlib
 import random
+import sys
 from functools import partial
 from typing import Callable
-from omegaconf import DictConfig
-from src.neural_graphs.nn.gnn import to_pyg_batch
+
 import torch
-from torch.nn.functional import mse_loss
-import torch_geometric
-from tqdm import tqdm
-import yaml
-
 import torch.nn.functional as F
-import sys
+from omegaconf import DictConfig
+from torch.nn.functional import mse_loss
+from tqdm import tqdm
 
-from analysis.utils.utils_ng import (
-    create_tmp_torch_geometric_loader,
+from analysis.utils.create_orbit_dataset import (
+    delete_orbit_dataset,
+    generate_orbit_dataset,
+)
+from analysis.utils.utils import (
     instantiate_inr_all_batches,
     interpolate_batch,
     load_ground_truth_image,
-    load_orbit_dataset_and_model,
     perturb_inr_all_batches,
-    plot_interpolation_curves,
     remove_tmp_torch_geometric_loader,
+    NUM_INTERPOLATION_SAMPLES,
+    BATCH_SIZE,
 )
-
-from analysis.utils.create_orbit_dataset import generate_orbit_dataset, delete_orbit_dataset
-
-from src.neural_graphs.nn.inr import INR
+from analysis.utils.utils_ng import (
+    create_tmp_torch_geometric_loader,
+    load_orbit_dataset_and_model,
+)
 from src.neural_graphs.experiments.data import Batch
-from src.scalegmn.autoencoder import create_batch_wb
+from src.neural_graphs.nn.inr import INR
 from src.phase_canonicalization.test_inr import test_inr
-from src.utils.helpers import overwrite_conf, set_seed
-
-NUM_INTERPOLATION_SAMPLES = 40
-BATCH_SIZE = 32
-
+from src.scalegmn.autoencoder import create_batch_wb
+from src.utils.helpers import set_seed
 
 
 # ------------------------------
@@ -122,6 +135,7 @@ def interpolation_experiment(
     perturbed_dataset_batches = perturb_inr_all_batches(
         loader=loader,
         perturbation = cfg.latent_analysis.perturbation,
+        is_tuple_loader=False,
     )
 
     perturbed_dataset_inrs: list[INR]
@@ -223,7 +237,6 @@ def interpolation_experiment(
     #print("[DEBUG] Finished plot_interpolation_curves")
    
 
-
 # ------------------------------
 def get_args():
     p = argparse.ArgumentParser(add_help=False)   # note: disable default help so “-h” still works
@@ -245,10 +258,9 @@ def get_args():
         help="Number of augmented INRs to generate",
     )
     
-
-    p.add_argument("--mnist_ground_truth_img", type=str, default="data/mnist/train/2/23089.png")
     p.add_argument("--save_path", type=str, default="analysis/resources/interpolation/interpolation_ng.png")
-    
+    p.add_argument("--mnist_ground_truth_img", type=str, default="data/mnist/train/2/23089.png")
+
     p.add_argument(
         "--num_runs",
         type=int,
@@ -297,10 +309,8 @@ def get_args():
 
 # **must** be done before Hydra is ever imported
 args = get_args()
-
 import hydra
 from omegaconf import OmegaConf
-
 
 @hydra.main(config_path="../src/neural_graphs/experiments/inr_classification/configs", config_name="base", version_base=None)
 def main(cfg):
@@ -344,16 +354,7 @@ def main(cfg):
     torch.set_float32_matmul_precision(cfg.matmul_precision)
     torch.backends.cudnn.benchmark = cfg.cudnn_benchmark
 
-    #args.mnist_ground_truth_img = "data/mnist/train/2/23089.png"
-    #args.save_path="analysis/resources/interpolation/interpolation.png"
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    #interpolation_experiment(
-    #    cfg=cfg,
-    #    device=device,
-    #    experiment_name="interpolation_experiment",
-    #)
 
     num_runs = cfg.latent_analysis.num_runs
 
@@ -427,16 +428,6 @@ def main(cfg):
 
         torch.save(loss_matrix_original_list, output_dir / filename_original)
         torch.save(loss_matrix_reconstruction_list, output_dir / filename_reconstruction)
-
-    plot_interpolation_curves(
-        loss_matrices=[
-            (loss_matrix_original_list, "Naive"),
-            (loss_matrix_reconstruction_list, "Reconstructed")
-        ],
-        save_path=f"analysis/resources/interpolation/interpolation_numruns={num_runs}_perturbation={cfg.latent_analysis.perturbation}.png",
-    )
-    
-    
 
 
 if __name__ == "__main__":

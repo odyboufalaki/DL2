@@ -130,7 +130,7 @@ wandb_args:
 
 save_model:
   save_model: False
-  save_dir: ./models/mnist_cls/scalegmn_autoencoder
+  save_dir: ./models/mnist_rec_scale/scalegmn_autoencoder
   save_name: scalegmn_autoencoder_mnist_rec.pt
   save_best: False
   save_every: 0 # save checkpoint every n epochs
