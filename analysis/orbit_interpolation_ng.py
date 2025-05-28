@@ -17,7 +17,7 @@ import yaml
 import torch.nn.functional as F
 import sys
 
-from src.neural_graphs.experiments.inr_classification.interpolation_utils.utils import (
+from analysis.utils.utils_ng import (
     create_tmp_torch_geometric_loader,
     instantiate_inr_all_batches,
     interpolate_batch,
@@ -302,7 +302,7 @@ import hydra
 from omegaconf import OmegaConf
 
 
-@hydra.main(config_path="configs", config_name="base", version_base=None)
+@hydra.main(config_path="../src/neural_graphs/experiments/inr_classification/configs", config_name="base", version_base=None)
 def main(cfg):
     """
     Run the interpolation experiment with the given arguments and configuration.

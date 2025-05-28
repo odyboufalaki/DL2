@@ -540,7 +540,6 @@ def main():
                 matching_type=args.linear_assignment,
             )
         else:
-            # Sample INR to create orbit
             loss_matrix_original, loss_matrix_reconstruction = interpolation_experiment(
                 args=args,
                 conf=conf, 

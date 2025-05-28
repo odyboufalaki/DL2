@@ -2,7 +2,7 @@
 target: src.neural_graphs.experiments.data.INRDataset
 normalize: False
 dataset_name: mnist
-dataset_dir: ${oc.env:PYTHONPATH}
+dataset_dir: /home/scur2584/DL2/ #${oc.env:PYTHONPATH}
 splits_path: data/mnist-inrs/mnist_splits.json #mnist_splits.json
 #orbit_path: data/mnist-inrs-orbit/mnist_orbit_splits.json
 orbit_path: analysis/tmp_dir/orbit/mnist_orbit_splits.json
