@@ -33,6 +33,10 @@ python src/utils/generate_data_splits.py --data_path $DATA_DIR/mnist-inrs --save
 # Phase canonicalize
 python src/phase_canonicalization/canonicalization.py --conf src/phase_canonicalization/mnist.yml
 ```
+Download of the MNIST dataset for the interpolation experiment:
+```bash 
+python script_utils/download_mnist.py
+```
 
 ## [Reproducing the experiments](#experiments)
 In an identical manner to [1], for every experiment we provide the corresponding configuration file in the `config/` directory.
@@ -46,7 +50,7 @@ python train_autoencoder.py --conf configs/mnist_rec/scalegmn_autoencoder.yml --
 
 ```bash
 # Train the Neural Graphs autoencoder
-
+python src/neural_graphs/experiments/inr_classification/main.py model=pna data=mnist
 ```
 
 Optionally train the autoencoder with the ablation of the scale canonicalization.

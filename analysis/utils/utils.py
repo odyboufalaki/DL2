@@ -386,11 +386,11 @@ def plot_interpolation_curves(
     plt.xlabel("Interpolation Step")
     plt.ylabel("Loss")
     plt.legend()
-    plt.show()
+    
 
     if save_path:
         plt.savefig(save_path)
         print(f"Interpolation curves saved to {save_path}")
-
+    plt.show()
     plt.close()
     
