@@ -179,7 +179,8 @@ python analysis/orbit_interpolation_ng.py \
 --save_matrices
 ```
 
-Finally generate the interpolation plots using the loss matrices:
+Finally generate the interpolation plots using the loss matrices.
+The logic behind `analysis/plot_orbit_interpolation.py` is to average over all INR pairs and all runs to plot the expected interpolation curve for the different methods (Naive, ScaleGMN autoencoder, Neural Graphs autoencoder and Linear Assignment).
 ```bash
 python analysis/plot_orbit_interpolation.py \
 --matrix_dir analysis/resources/interpolation/matrices \
