@@ -33,7 +33,7 @@ python src/utils/generate_data_splits.py --data_path $DATA_DIR/mnist-inrs --save
 # Phase canonicalize
 python src/phase_canonicalization/canonicalization.py --conf src/phase_canonicalization/mnist.yml
 ```
-Download of the MNIST dataset for the interpolation experiment:
+Download the MNIST dataset for the interpolation experiment:
 ```bash 
 python script_utils/download_mnist.py
 ```
