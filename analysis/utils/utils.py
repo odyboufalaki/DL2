@@ -331,6 +331,7 @@ def convert_and_prepare_weights(rebased_weights, rebased_biases, device=None):
 def plot_interpolation_curves(
     loss_matrices: list[tuple[torch.Tensor, str]],
     save_path: str = None,
+    with_legend: bool = False
 ) -> None:
     """Plot multiple interpolation curves.
 
@@ -385,7 +386,10 @@ def plot_interpolation_curves(
     plt.subplots_adjust(left=0.10, right=0.98, top=0.98, bottom=0.12)
     plt.xlabel("Interpolation Step")
     plt.ylabel("Loss")
-    plt.legend()
+    if with_legend:
+        plt.legend(loc='upper left', fontsize=12, frameon=False)
+    else:
+        plt.legend().set_visible(False)
     plt.show()
 
     if save_path:
