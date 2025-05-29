@@ -390,11 +390,11 @@ def plot_interpolation_curves(
         plt.legend(loc='upper left', fontsize=12, frameon=False)
     else:
         plt.legend().set_visible(False)
-    plt.show()
+    
 
     if save_path:
         plt.savefig(save_path)
         print(f"Interpolation curves saved to {save_path}")
-
+    plt.show()
     plt.close()
     
