@@ -30,7 +30,7 @@ from omegaconf import DictConfig
 from torch.nn.functional import mse_loss
 from tqdm import tqdm
 
-from analysis.utils.create_orbit_dataset import (
+from analysis.utils.orbit_dataset import (
     delete_orbit_dataset,
     generate_orbit_dataset,
 )

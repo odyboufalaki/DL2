@@ -21,7 +21,7 @@ def load_loss_matrices(args: argparse.Namespace):
         
         file_metadata = {
             'matrix_type': parts[1],      # naive or reconstruction
-            'method': parts[2],           # linear_assignment, scalegmn or neural_graphs
+            'method': parts[2],           # linear_assignment, scalegmn, neural_graphs or ablation
             'transformation': parts[3],    # P, D, or PD
             'num_runs': int(parts[4].split("=")[1]),
             'perturbation': float(parts[5].split("=")[1])
@@ -98,14 +98,19 @@ def main():
             (matrices[transformation]["linear_assignment"]["reconstruction"], "Linear Assignment"),
             (matrices[transformation]["scalegmn"]["reconstruction"], "ScaleGMN Autoencoder"),
             (matrices[transformation]["neural_graphs"]["reconstruction"], "Neural Graphs Autoencoder"),
+            (matrices[transformation]["ablation"]["reconstruction"], "Ablation Autoencoder"),
         ]
+        
         
         # Plot the interpolation curves
         save_path = (
             args.output_dir + "/"
             f"{transformation}_numruns={metadata['num_runs']}_perturbation={metadata['perturbation']}.png"
         )
-        plot_interpolation_curves(curves, save_path=save_path)
+        if transformation == "PD":
+            plot_interpolation_curves(curves, save_path=save_path, with_legend=True)
+        else:
+            plot_interpolation_curves(curves, save_path=save_path)
 
 if __name__ == "__main__":
     main()

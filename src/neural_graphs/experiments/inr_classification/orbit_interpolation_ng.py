@@ -28,7 +28,7 @@ from src.neural_graphs.experiments.inr_classification.interpolation_utils.utils 
     remove_tmp_torch_geometric_loader,
 )
 
-from analysis.utils.create_orbit_dataset import generate_orbit_dataset, delete_orbit_dataset
+from analysis.utils.orbit_dataset import generate_orbit_dataset, delete_orbit_dataset
 
 from src.neural_graphs.nn.inr import INR
 from src.neural_graphs.experiments.data import Batch

@@ -386,11 +386,11 @@ def plot_interpolation_curves(
     plt.subplots_adjust(left=0.10, right=0.98, top=0.98, bottom=0.12)
     plt.xlabel("Interpolation Step")
     plt.ylabel("Loss")
+
     if with_legend:
         plt.legend(loc='upper left', fontsize=12, frameon=False)
     else:
         plt.legend().set_visible(False)
-    
 
     if save_path:
         plt.savefig(save_path)

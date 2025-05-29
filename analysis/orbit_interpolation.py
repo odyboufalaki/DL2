@@ -32,7 +32,7 @@ from torch.nn.functional import mse_loss
 from tqdm import tqdm
 
 from analysis.linear_assignment import match_weights_biases_batch
-from analysis.utils.create_orbit_dataset import (
+from analysis.utils.orbit_dataset import (
     delete_orbit_dataset,
     generate_orbit_dataset,
 )
@@ -549,6 +549,9 @@ def main():
 
         torch.save(loss_matrix_original_list, output_dir / filename_original)
         torch.save(loss_matrix_reconstruction_list, output_dir / filename_reconstruction)
+
+        print(f"Saved loss matrix: {output_dir / filename_original}")
+        print(f"Saved loss matrix: {output_dir / filename_reconstruction}")
 
 
 if __name__ == "__main__":
