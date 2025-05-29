@@ -60,7 +60,7 @@ Optionally train the autoencoder with the ablation of the scale canonicalization
 python train_autoencoder.py --conf configs/mnist_rec/scalegmn_autoencoder_ablation.yml --wandb True
 ```
 
-Now, in order to generalize the code from the experiments first define the saved model weights and config file as environment variables. For the ScaleGMN these are as follows:
+Now, in order to generalize the commands from the experiments first define the saved model weights and config file as environment variables. For the ScaleGMN these are as follows:
 ```bash
 export MODEL_CONFIG=configs/mnist_rec/scalegmn_autoencoder.yml
 export MODEL_WEIGHTS=models/mnist_rec_scale/scalegmn_autoencoder/scalegmn_autoencoder_mnist_rec.pt
