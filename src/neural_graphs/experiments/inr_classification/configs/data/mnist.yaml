@@ -2,9 +2,9 @@
 target: src.neural_graphs.experiments.data.INRDataset
 normalize: False
 dataset_name: mnist
-dataset_dir: /home/scur2584/DL2/ #${oc.env:PYTHONPATH}
+dataset_dir: ${oc.env:PYTHONPATH}
 splits_path: data/mnist-inrs/mnist_splits.json #mnist_splits.json
-#orbit_path: data/mnist-inrs-orbit/mnist_orbit_splits.json
+orbit_ng_plot: data/mnist-inrs-orbit/mnist_orbit_splits.json
 orbit_path: analysis/tmp_dir/orbit/mnist_orbit_splits.json
 statistics_path: mnist_statistics.pth
 num_classes: 10
@@ -60,6 +60,18 @@ test:
   permutation: False
   statistics_path: ${data.statistics_path}
   # num_classes: ${data.num_classes}
+
+orbit_plot:
+  _target_: ${data.target}
+  dataset_dir: ${data.dataset_dir}
+  splits_path: ${data.orbit_ng_plot}
+  split: test
+  normalize: ${data.normalize}
+  augmentation: False
+  permutation: False
+  statistics_path: ${data.statistics_path}
+  # num_classes: ${data.num_classes}
+
 
 orbit:
   _target_: ${data.target}

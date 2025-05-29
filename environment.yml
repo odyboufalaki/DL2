@@ -26,3 +26,4 @@ dependencies:
       - opencv-python==4.10.0.84
       - random-fourier-features-pytorch==1.0.1
       - umap-learn
+      - hydra-core

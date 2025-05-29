@@ -117,7 +117,7 @@ def get_args():
         choices=["train", "val", "test"],
         help="which split of the ORIGINAL data to fit UMAP on",
     )
-    p.add_argument("--outdir", type=str, default="latent/resources/orbit_plots")
+    p.add_argument("--outdir", type=str, default="analysis/resources/orbit_plots")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument(
         "--n_neighbors",

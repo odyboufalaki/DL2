@@ -56,13 +56,13 @@ Optionally train the autoencoder with the ablation of the scale canonicalization
 python train_autoencoder.py --conf configs/mnist_rec/scalegmn_autoencoder_ablation.yml --wandb True
 ```
 
-Now, in order to generalize the code from the experiments first define the saved model weights and config file as environment variables
+Now, in order to generalize the code from the experiments first define the saved model weights and config file as environment variables. For the ScaleGMN these are the following:
 ```bash
 export MODEL_CONFIG=configs/mnist_rec/scalegmn_autoencoder.yml
 export MODEL_WEIGHTS=models/mnist_rec_scale/scalegmn_autoencoder/scalegmn_autoencoder_mnist_rec.pt
 ```
 
-### Experiment 1: Visualizing the latent space and INR orbits
+### Experiment 1: Visualizing the latent space 
 ```bash
 # Visualize the latent space for the ScaleGMN autoencoder
 python analysis/dim_red.py \
@@ -74,10 +74,36 @@ python analysis/dim_red.py \
 
 ```bash
 # Visualize the latent space for the Neural Graphs autoencoder
+export MODEL_WEIGHTS=outputs/2025-05-11/16-21-51/5gzpb5lt/best_val.ckpt
+python analysis/latent_tsne_umap_ng.py \ 
+--ckpt $MODEL_WEIGHTS \
+--outdir analysis/resources/visualization \
+--seed 0
+```
+
+### Experiment 2 Visualize the INR orbits
+
+```bash
+# First create the orbit dataset by specifying the group action via the --transform_type argument (P: Permutations, D: Sign Flipping, PD: Permutations & Sign Flipping)
+python analysis/utils/create_orbit_dataset.py --transform_type D
+```
+
+```bash
+# Visualize the orbit for the ScaleGMN 
+python analysis/plot_orbit.py --conf $MODEL_CONFIG \ 
+--ckpt $MODEL_WEIGHTS \  
+--outdir analysis/resources/visualization
 
 ```
 
-### Experiment 2: Interpolation experiment
+```bash
+# Visualize the orbit for the Neural Graphs
+python analysis/plot_orbit_ng.py --ckpt $MODEL_WEIGHTS \  
+--outdir analysis/resources/visualization
+
+```
+
+### Experiment 3: Interpolation experiment
 
 
 We now define the type of group action to be applied to the weights and biases of an INR in order to generate the orbit dataset (a dataset of functionally equivalent INRs but that live in different basins given that we applied the group action).
