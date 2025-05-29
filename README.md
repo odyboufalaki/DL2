@@ -1,7 +1,7 @@
 > This work extends previous research and public codebases, please refer to the [credit attribution](#credit-attribution) section.
 
 
-# An autoencoder approximation to solving the assignment problem
+# An autoencoder approach to solving the assignment problem
 <!-- Link to the paper: [[Title of our paper](https://arxiv.org/)] -->
 ## Abstract
 
