@@ -1,4 +1,4 @@
-name: environment
+name: sgmn-ng-lap-rebasin
 channels:
   - pytorch
   - nvidia
