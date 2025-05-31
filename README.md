@@ -88,7 +88,7 @@ python analysis/visualization_ng.py \
 ```
 
 ### Experiment 2: Visualize the INR orbits
-We now empirically test the effect of the encoders by generating an orbit dataset via the script `analysis/utils/create_orbit_dataset.py`.
+We now empirically test the effect of the encoders by generating an orbit dataset via the script `analysis/utils/orbit_dataset.py`.
 We first define the type of group action to be applied to the weights and biases of an INR in order to generate the orbit dataset (a dataset of functionally equivalent INRs but that live in different basins).
 These are the options for generating the orbits orbit:
 
@@ -97,7 +97,7 @@ These are the options for generating the orbits orbit:
     - PD: First flip signs then permute (both)
 
 ```bash
-python analysis/utils/create_orbit_dataset.py --transform_type D
+python analysis/utils/orbit_dataset.py --transform_type D
 ```
 
 We now pass the orbit INRs through the different architectures using the script `analysis/plot_orbit(_ng).py`.
