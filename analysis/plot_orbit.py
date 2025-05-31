@@ -95,20 +95,20 @@ def get_args():
     p.add_argument(
         "--conf",
         type=str,
-        default="configs/mnist_rec/scalegmn_autoencoder.yml",
+        default="configs/mnist_rec/scalegmn_autoencoder_ablation.yml",
         help="YAML config used at train",
     )
     p.add_argument(
         "--ckpt",
         type=str,
-        default="models/mnist_rec_scale/scalegmn_autoencoder/scalegmn_autoencoder_mnist_rec.pt",
+        default="models/mnist_rec_scale/scalegmn_autoencoder_ablation/scalegmn_autoencoder_baseline_mnist_rec_ablation.pt",
         help="Path to .pt model weights"
     )
     p.add_argument(
         "--orbit_json",
         type=str,
         default="data/mnist-inrs-orbit/mnist_orbit_splits.json",
-        help="splits JSON written by create_orbit_dataset.py",
+        help="splits JSON written by orbit_dataset.py",
     )
     p.add_argument(
         "--fit_split",

@@ -48,6 +48,13 @@ def get_args():
         default=2**12,
         help="Number of augmented INRs to generate",
     )
+    p.add_argument(
+        "--transform_type",
+        type=str,
+        default="PD",
+        choices=["PD", "P", "D"],
+        help="Type of transformation to apply to the weights and biases",
+    )
     p.add_argument("--seed", type=int, default=100)
     return p.parse_args()
 
@@ -282,7 +289,6 @@ def generate_orbit_dataset(
         #         f"Skipping INR {inr_id} because it has the same transformation as a previous one."
         #     )
         #     continue
-        # NOTE: Commented because probability of repeating the same transformation is minuscule and takes too long to check
 
         flip_history.append(iteration_flips)
 
@@ -358,4 +364,6 @@ if __name__ == "__main__":
         output_dir=args.output_dir,
         inr_path=args.inr_path,
         device=device,
+        dataset_size=args.dataset_size,
+        transform_type=args.transform_type,
     )
