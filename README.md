@@ -71,20 +71,13 @@ Once we have trained the autoencoders the first experiment is to visualize the l
 To this end, we fit two dimensionality reduction methods: [t-SNE](https://www.jmlr.org/papers/volume9/vandermaaten08a/vandermaaten08a.pdf) and [uMAP](https://arxiv.org/pdf/1802.03426).
 ```bash
 # Visualize the latent space for the ScaleGMN autoencoder
-python analysis/visualization.py
---conf $MODEL_CONFIG
---ckpt $MODEL_WEIGHTS
---outdir analysis/resources/visualization
---seed 0
+python analysis/visualization.py --conf $MODEL_CONFIG --ckpt $MODEL_WEIGHTS --outdir analysis/resources/visualization --seed 0
 ```
 
 ```bash
 # Visualize the latent space for the Neural Graphs autoencoder
-export MODEL_WEIGHTS=outputs/2025-05-11/16-21-51/5gzpb5lt/best_val.ckpt
-python analysis/visualization_ng.py
---ckpt $MODEL_WEIGHTS
---outdir analysis/resources/visualization
---seed 0
+export MODEL_WEIGHTS=outputs/2025-05-11/16-21-51/5gzpb5lt/best_val.ckpt 
+python analysis/visualization_ng.py --ckpt $MODEL_WEIGHTS --outdir analysis/resources/visualization --seed 0
 ```
 
 ### Experiment 2: Visualize the INR orbits
@@ -104,16 +97,13 @@ We now pass the orbit INRs through the different architectures using the script 
 It is expected to see how ScaleGMN collapses the orbit for permutations and sign flippings, while Neural Graphs are only able to collapse the permuted orbit.
 ```bash
 # Visualize the orbit for the ScaleGMN 
-python analysis/plot_orbit.py --conf $MODEL_CONFIG 
---ckpt $MODEL_WEIGHTS
---outdir analysis/resources/visualization
+python analysis/plot_orbit.py --conf $MODEL_CONFIG --ckpt $MODEL_WEIGHTS --outdir analysis/resources/visualization
 
 ```
 
 ```bash
 # Visualize the orbit for the Neural Graphs
-python analysis/plot_orbit_ng.py --ckpt $MODEL_WEIGHTS
---outdir analysis/resources/visualization
+python analysis/plot_orbit_ng.py --ckpt $MODEL_WEIGHTS --outdir analysis/resources/visualization
 
 ```
 
@@ -137,54 +127,23 @@ These matrices are concatenated to generate the final output `[dataset_size * nu
 
 ```bash
 # Interpolate using linear assignment
-python analysis/orbit_interpolation.py
---conf $MODEL_CONFIG
---tmp_dir analysis/tmp_dir
---dataset_size 512
---split test
---seed 0
---num_runs 10
---perturbation 0.005
---linear_assignment $INTERPOLATION_TYPE
---orbit_transformation $INTERPOLATION_TYPE
---save_matrices
+python analysis/orbit_interpolation.py --conf $MODEL_CONFIG --tmp_dir analysis/tmp_dir --dataset_size 512 --split test --seed 0 --num_runs 10 --perturbation 0.005 --linear_assignment $INTERPOLATION_TYPE --orbit_transformation $INTERPOLATION_TYPE --save_matrices
 ```
 
 ```bash
 # Interpolate using ScaleGMN autoencoder
-python analysis/orbit_interpolation.py
---conf $MODEL_CONFIG
---ckpt $MODEL_WEIGHTS
---tmp_dir analysis/tmp_dir
---dataset_size 512
---split test
---seed 0
---num_runs 10
---perturbation 0.005
---orbit_transformation $INTERPOLATION_TYPE
---save_matrices
+python analysis/orbit_interpolation.py --conf $MODEL_CONFIG --ckpt $MODEL_WEIGHTS --tmp_dir analysis/tmp_dir --dataset_size 512 --split test --seed 0 --num_runs 10 --perturbation 0.005 --orbit_transformation $INTERPOLATION_TYPE --save_matrices
 ```
 
 ```bash
 # Interpolate using Neural Graphs autoencoder
-python analysis/orbit_interpolation_ng.py
---ckpt $MODEL_WEIGHTS
---tmp_dir analysis/tmp_dir
---dataset_size 512
---split test
---seed 0
---num_runs 10
---perturbation 0.005
---orbit_transformation $INTERPOLATION_TYPE
---save_matrices
+python analysis/orbit_interpolation_ng.py --ckpt $MODEL_WEIGHTS --tmp_dir analysis/tmp_dir --dataset_size 512 --split test --seed 0 --num_runs 10 --perturbation 0.005 --orbit_transformation $INTERPOLATION_TYPE --save_matrices
 ```
 
 Finally generate the interpolation plots using the loss matrices.
 The logic behind `analysis/plot_orbit_interpolation.py` is to average over all INR pairs and all runs to plot the expected interpolation curve for the different methods (Naive, ScaleGMN autoencoder, Neural Graphs autoencoder and Linear Assignment).
 ```bash
-python analysis/plot_orbit_interpolation.py
---matrix_dir analysis/resources/interpolation/matrices
---output_dir analysis/resources/interpolation
+python analysis/plot_orbit_interpolation.py --matrix_dir analysis/resources/interpolation/matrices --output_dir analysis/resources/interpolation
 ```
 
 ### [Credit attribution](#credit-attribution)
