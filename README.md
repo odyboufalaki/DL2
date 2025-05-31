@@ -1,7 +1,7 @@
 > This work extends previous research and public codebases, please refer to the [credit attribution](#credit-attribution) section.
 
 
-# An autoencoder approximation to solving the assignment problem
+# An autoencoder approach to solving the assignment problem
 <!-- Link to the paper: [[Title of our paper](https://arxiv.org/)] -->
 ## Abstract
 
@@ -33,7 +33,7 @@ python src/utils/generate_data_splits.py --data_path $DATA_DIR/mnist-inrs --save
 # Phase canonicalize
 python src/phase_canonicalization/canonicalization.py --conf src/phase_canonicalization/mnist.yml
 ```
-Download of the MNIST dataset for the interpolation experiment:
+Download the MNIST dataset for the interpolation experiment:
 ```bash 
 python script_utils/download_mnist.py
 ```
@@ -60,7 +60,7 @@ Optionally train the autoencoder with the ablation of the scale canonicalization
 python train_autoencoder.py --conf configs/mnist_rec/scalegmn_autoencoder_ablation.yml --wandb True
 ```
 
-Now, in order to generalize the code from the experiments first define the saved model weights and config file as environment variables. For the ScaleGMN these are as follows:
+Now, in order to generalize the commands from the experiments first define the saved model weights and config file as environment variables. For the ScaleGMN these are as follows:
 ```bash
 export MODEL_CONFIG=configs/mnist_rec/scalegmn_autoencoder.yml
 export MODEL_WEIGHTS=models/mnist_rec_scale/scalegmn_autoencoder/scalegmn_autoencoder_mnist_rec.pt
@@ -179,7 +179,8 @@ python analysis/orbit_interpolation_ng.py \
 --save_matrices
 ```
 
-Finally generate the interpolation plots using the loss matrices:
+Finally generate the interpolation plots using the loss matrices.
+The logic behind `analysis/plot_orbit_interpolation.py` is to average over all INR pairs and all runs to plot the expected interpolation curve for the different methods (Naive, ScaleGMN autoencoder, Neural Graphs autoencoder and Linear Assignment).
 ```bash
 python analysis/plot_orbit_interpolation.py \
 --matrix_dir analysis/resources/interpolation/matrices \
