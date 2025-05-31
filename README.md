@@ -13,7 +13,10 @@ git clone git@github.com:odyboufalaki/DL2.git
 conda env create -n environment --file environment.yml
 conda activate environment
 ```
-
+Navigate to the root directory of the project and export the PYTHONPATH:
+```bash
+export PYTHONPATH=$PWD
+```
 Download and preprocess the data.
 For the INR datasets we use the data provided by [DWS](https://github.com/AvivNavon/DWSNets), [MNIST-INRs](https://www.dropbox.com/sh/56pakaxe58z29mq/AABtWNkRYroLYe_cE3c90DXVa?dl=0&preview=mnist-inrs.zip) - ([Navon et al. 2023](https://arxiv.org/abs/2301.12780)):
 ```bash
